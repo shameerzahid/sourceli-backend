@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  FARMER
+  BUYER
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  BLOCKED
+  APPLIED
+  PROBATIONARY  // For farmers who are approved but in probation period
+}
+
+enum BuyerType {
+  RESTAURANT
+  HOTEL
+  CATERER
+  INDIVIDUAL
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String    @unique
+  passwordHash  String    @map("password_hash")
+  role          UserRole
+  status        UserStatus @default(PENDING)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  farmer        Farmer?
+  buyer         Buyer?
+  auditLogs     AuditLog[]
+  
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([status])
+  @@index([role, status])
+  @@map("users")
+}
+
+model Farmer {
+  id                    String      @id @default(cuid())
+  userId                String      @unique
+  fullName              String      @map("full_name")
+  farmName              String?     @map("farm_name")
+  region                String
+  town                  String
+  weeklyCapacityMin     Int         @map("weekly_capacity_min")
+  weeklyCapacityMax     Int         @map("weekly_capacity_max")
+  produceCategory       String      @map("produce_category")
+  feedingMethod         String      @map("feeding_method")
+  verificationDate      DateTime?   @map("verification_date")
+  verificationAdminId   String?     @map("verification_admin_id")
+  
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application           FarmerApplication?
+  farmPhotos            FarmPhoto[]
+  
+  @@index([userId])
+  @@index([region])
+  @@index([produceCategory])
+  @@map("farmers")
+}
+
+model Buyer {
+  id                String      @id @default(cuid())
+  userId            String      @unique
+  fullName          String      @map("full_name")
+  businessName      String?     @map("business_name")
+  buyerType         BuyerType   @map("buyer_type")
+  contactPerson     String      @map("contact_person")
+  estimatedVolume   Int?        @map("estimated_volume")
+  verificationDate  DateTime?   @map("verification_date")
+  verificationAdminId String?   @map("verification_admin_id")
+  
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registration      BuyerRegistration?
+  deliveryAddresses DeliveryAddress[]
+  
+  @@index([userId])
+  @@index([buyerType])
+  @@map("buyers")
+}
+
+model DeliveryAddress {
+  id          String   @id @default(cuid())
+  buyerId     String   @map("buyer_id")
+  address     String
+  landmark    String?
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  buyer       Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  @@index([buyerId])
+  @@index([buyerId, isDefault])
+  @@map("delivery_addresses")
+}
+
+model FarmerApplication {
+  id              String      @id @default(cuid())
+  farmerId        String      @unique @map("farmer_id")
+  status          UserStatus  @default(APPLIED)
+  termsAccepted   Boolean     @default(false) @map("terms_accepted")
+  termsAcceptedAt DateTime?   @map("terms_accepted_at")
+  submittedAt     DateTime    @default(now()) @map("submitted_at")
+  reviewedAt      DateTime?   @map("reviewed_at")
+  adminNotes      String?     @map("admin_notes")
+  rejectionReason String?     @map("rejection_reason")
+  
+  farmer          Farmer      @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([submittedAt])
+  @@map("farmer_applications")
+}
+
+model BuyerRegistration {
+  id              String      @id @default(cuid())
+  buyerId         String      @unique @map("buyer_id")
+  status          UserStatus  @default(PENDING)
+  submittedAt     DateTime    @default(now()) @map("submitted_at")
+  reviewedAt      DateTime?   @map("reviewed_at")
+  adminNotes      String?     @map("admin_notes")
+  rejectionReason String?     @map("rejection_reason")
+  
+  buyer           Buyer       @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([submittedAt])
+  @@map("buyer_registrations")
+}
+
+model FarmPhoto {
+  id            String   @id @default(cuid())
+  farmerId      String   @map("farmer_id")
+  filePath      String   @map("file_path")
+  fileType      String   @map("file_type")
+  uploadedAt    DateTime @default(now()) @map("uploaded_at")
+  
+  farmer        Farmer   @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  
+  @@index([farmerId])
+  @@map("farm_photos")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?  @map("user_id")
+  actionType  String   @map("action_type")
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  details     Json
+  timestamp   DateTime @default(now())
+  ipAddress   String?  @map("ip_address")
+  
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([actionType])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+

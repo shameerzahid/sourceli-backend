@@ -1,0 +1,979 @@
+{
+	"info": {
+		"_postman_id": "sourceli-api-v1",
+		"name": "Sourceli API - Milestone 1",
+		"description": "Postman collection for Sourceli B2B Fresh Produce Marketplace API\n\nBase URL: http://localhost:3001\n\nThis collection includes all authentication endpoints for Milestone 1.\n\n**Important:**\n- Farmer registration requires multipart/form-data with photos\n- Buyer registration uses JSON\n- Cloudinary must be configured for photo uploads\n- See CLOUDINARY_SETUP.md for configuration",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/health",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"health"
+					]
+				},
+				"description": "Check if the API server is running"
+			},
+			"response": []
+		},
+		{
+			"name": "API Info",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api"
+					]
+				},
+				"description": "Get API information and available endpoints"
+			},
+			"response": []
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register Farmer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"farmerUserId\", response.data.userId);",
+									"    pm.environment.set(\"farmerApplicationId\", response.data.applicationId);",
+									"    console.log(`Photos uploaded: ${response.data.photosUploaded || 0}`);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "email",
+									"value": "farmer@example.com",
+									"type": "text"
+								},
+								{
+									"key": "phone",
+									"value": "+1234567890",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "SecurePass123!",
+									"type": "text"
+								},
+								{
+									"key": "fullName",
+									"value": "John Farmer",
+									"type": "text"
+								},
+								{
+									"key": "farmName",
+									"value": "Green Valley Farm",
+									"type": "text"
+								},
+								{
+									"key": "region",
+									"value": "North Region",
+									"type": "text"
+								},
+								{
+									"key": "town",
+									"value": "Farmville",
+									"type": "text"
+								},
+								{
+									"key": "weeklyCapacityMin",
+									"value": "50",
+									"type": "text"
+								},
+								{
+									"key": "weeklyCapacityMax",
+									"value": "200",
+									"type": "text"
+								},
+								{
+									"key": "produceCategory",
+									"value": "Rabbit",
+									"type": "text"
+								},
+								{
+									"key": "feedingMethod",
+									"value": "Organic",
+									"type": "text"
+								},
+								{
+									"key": "termsAccepted",
+									"value": "true",
+									"type": "text",
+									"description": "Must be true - agreement to platform rules, performance-based access, and no price negotiation policy"
+								},
+								{
+									"key": "photos",
+									"type": "file",
+									"src": [],
+									"description": "Upload farm photos (housing, animals, produce). Minimum 1 photo required, maximum 10. Formats: JPEG, PNG, WebP. Max size: 5MB per image."
+								},
+								{
+									"key": "photos",
+									"type": "file",
+									"src": [],
+									"description": "Additional photo (optional)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register/farmer",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register",
+								"farmer"
+							]
+						},
+						"description": "Register a new farmer with farm photos.\n\n**Required:**\n- All form fields\n- termsAccepted must be true (platform rules agreement)\n- At least 1 farm photo (up to 10 photos)\n\n**Photo Requirements:**\n- Formats: JPEG, JPG, PNG, WebP\n- Max size: 5MB per image\n- Max count: 10 images\n- Photos should show: farm, housing, animals, and/or produce\n\n**Platform Rules Agreement:**\n- Farmer must agree to: platform rules, performance-based access, and no price negotiation policy\n- Set termsAccepted to \"true\"\n\n**Note:** Creates user with status APPLIED, requires admin approval. Photos are uploaded to Cloudinary."
+					},
+					"response": []
+				},
+				{
+					"name": "Register Buyer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"buyerUserId\", response.data.userId);",
+									"    pm.environment.set(\"buyerRegistrationId\", response.data.registrationId);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"buyer@restaurant.com\",\n  \"phone\": \"+1987654321\",\n  \"password\": \"SecurePass123!\",\n  \"fullName\": \"Restaurant Owner\",\n  \"businessName\": \"Fine Dining Restaurant\",\n  \"buyerType\": \"RESTAURANT\",\n  \"contactPerson\": \"John Manager\",\n  \"estimatedVolume\": 100,\n  \"deliveryAddresses\": [\n    {\n      \"address\": \"123 Main Street, City, State 12345\",\n      \"landmark\": \"Near Central Park\",\n      \"isDefault\": true\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register/buyer",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register",
+								"buyer"
+							]
+						},
+						"description": "Register a new buyer. Creates user with status PENDING, requires admin approval."
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"accessToken\", response.data.accessToken);",
+									"    pm.environment.set(\"refreshToken\", response.data.refreshToken);",
+									"    pm.environment.set(\"userId\", response.data.user.id);",
+									"    pm.environment.set(\"userRole\", response.data.user.role);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"emailOrPhone\": \"farmer@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login with email or phone number and password. Returns access token and refresh token."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"me"
+							]
+						},
+						"description": "Get current authenticated user's profile with role-specific data."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Access Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"accessToken\", response.data.accessToken);",
+									"    pm.environment.set(\"refreshToken\", response.data.refreshToken);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"refresh"
+							]
+						},
+						"description": "Refresh access token using refresh token. Returns new access and refresh tokens."
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Logout current user. In MVP, this is handled client-side by removing tokens."
+					},
+					"response": []
+				},
+				{
+					"name": "Forgot Password",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 && pm.environment.get(\"NODE_ENV\") === \"development\") {",
+									"    const response = pm.response.json();",
+									"    if (response.resetToken) {",
+									"        pm.environment.set(\"resetToken\", response.resetToken);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"emailOrPhone\": \"farmer@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/forgot-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"forgot-password"
+							]
+						},
+						"description": "Request password reset. In development mode, returns reset token. In production, sends token via email/SMS."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Reset Token",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/verify-reset-token/{{resetToken}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"verify-reset-token",
+								"{{resetToken}}"
+							]
+						},
+						"description": "Verify if password reset token is valid before showing reset form."
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"NewSecurePass123!\",\n  \"confirmPassword\": \"NewSecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/reset-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"reset-password"
+							]
+						},
+						"description": "Reset password using reset token."
+					},
+					"response": []
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"currentPassword\": \"SecurePass123!\",\n  \"newPassword\": \"NewSecurePass123!\",\n  \"confirmPassword\": \"NewSecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/change-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"change-password"
+							]
+						},
+						"description": "Change password for authenticated users. Requires current password."
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints for user registration, login, and password management"
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Farmer Applications",
+					"item": [
+						{
+							"name": "Get Pending Farmer Applications",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/farmers/applications",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"farmers",
+										"applications"
+									]
+								},
+								"description": "Get all pending farmer applications. Requires admin role."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Farmer Application by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/farmers/applications/{{farmerApplicationId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"farmers",
+										"applications",
+										"{{farmerApplicationId}}"
+									]
+								},
+								"description": "Get a specific farmer application by ID with full details including photos."
+							},
+							"response": []
+						},
+						{
+							"name": "Approve Farmer Application",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    console.log('Farmer application approved successfully');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"adminNotes\": \"Application approved after review. Farm looks good.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/farmers/applications/{{farmerApplicationId}}/approve",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"farmers",
+										"applications",
+										"{{farmerApplicationId}}",
+										"approve"
+									]
+								},
+								"description": "Approve a farmer application. Sets user status to PROBATIONARY and records verification info."
+							},
+							"response": []
+						},
+						{
+							"name": "Reject Farmer Application",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    console.log('Farmer application rejected');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"rejectionReason\": \"Farm does not meet quality standards. Please improve facilities and reapply.\",\n  \"adminNotes\": \"Photos show inadequate housing conditions.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/farmers/applications/{{farmerApplicationId}}/reject",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"farmers",
+										"applications",
+										"{{farmerApplicationId}}",
+										"reject"
+									]
+								},
+								"description": "Reject a farmer application. Sets user status to BLOCKED and records rejection reason."
+							},
+							"response": []
+						}
+					],
+					"description": "Manage farmer applications - view, approve, and reject"
+				},
+				{
+					"name": "Buyer Registrations",
+					"item": [
+						{
+							"name": "Get Pending Buyer Registrations",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/buyers/registrations",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"buyers",
+										"registrations"
+									]
+								},
+								"description": "Get all pending buyer registrations. Requires admin role."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Buyer Registration by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/buyers/registrations/{{buyerRegistrationId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"buyers",
+										"registrations",
+										"{{buyerRegistrationId}}"
+									]
+								},
+								"description": "Get a specific buyer registration by ID with full details including delivery addresses."
+							},
+							"response": []
+						},
+						{
+							"name": "Approve Buyer Registration",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    console.log('Buyer registration approved successfully');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"adminNotes\": \"Registration approved. Business verified.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/buyers/registrations/{{buyerRegistrationId}}/approve",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"buyers",
+										"registrations",
+										"{{buyerRegistrationId}}",
+										"approve"
+									]
+								},
+								"description": "Approve a buyer registration. Sets user status to ACTIVE and records verification info."
+							},
+							"response": []
+						},
+						{
+							"name": "Reject Buyer Registration",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    console.log('Buyer registration rejected');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"rejectionReason\": \"Business verification failed. Please provide valid business documents.\",\n  \"adminNotes\": \"Unable to verify business registration.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/buyers/registrations/{{buyerRegistrationId}}/reject",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"buyers",
+										"registrations",
+										"{{buyerRegistrationId}}",
+										"reject"
+									]
+								},
+								"description": "Reject a buyer registration. Sets user status to BLOCKED and records rejection reason."
+							},
+							"response": []
+						}
+					],
+					"description": "Manage buyer registrations - view, approve, and reject"
+				},
+				{
+					"name": "User Management",
+					"item": [
+						{
+							"name": "Get All Farmers",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/farmers?status=ACTIVE&region=North Region",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"farmers"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "ACTIVE",
+											"description": "Filter by status: ACTIVE, PROBATIONARY, APPLIED, SUSPENDED, BLOCKED"
+										},
+										{
+											"key": "region",
+											"value": "North Region",
+											"description": "Filter by region"
+										},
+										{
+											"key": "produceCategory",
+											"value": "Rabbit",
+											"description": "Filter by produce category",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get all farmers with optional filters (status, region, produceCategory)."
+							},
+							"response": []
+						},
+						{
+							"name": "Update Farmer Status",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"ACTIVE\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/farmers/{{farmerId}}/status",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"farmers",
+										"{{farmerId}}",
+										"status"
+									]
+								},
+								"description": "Update farmer status. Valid statuses: ACTIVE, PROBATIONARY, SUSPENDED, BLOCKED."
+							},
+							"response": []
+						},
+						{
+							"name": "Get All Buyers",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/buyers?status=ACTIVE&buyerType=RESTAURANT",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"buyers"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "ACTIVE",
+											"description": "Filter by status: ACTIVE, PENDING, SUSPENDED, BLOCKED"
+										},
+										{
+											"key": "buyerType",
+											"value": "RESTAURANT",
+											"description": "Filter by buyer type: RESTAURANT, HOTEL, CATERER, INDIVIDUAL"
+										}
+									]
+								},
+								"description": "Get all buyers with optional filters (status, buyerType)."
+							},
+							"response": []
+						},
+						{
+							"name": "Update Buyer Status",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"SUSPENDED\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/buyers/{{buyerId}}/status",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"buyers",
+										"{{buyerId}}",
+										"status"
+									]
+								},
+								"description": "Update buyer status. Valid statuses: ACTIVE, PENDING, SUSPENDED, BLOCKED."
+							},
+							"response": []
+						}
+					],
+					"description": "Manage all farmers and buyers - view lists and update statuses"
+				}
+			],
+			"description": "Admin endpoints for managing farmer applications, buyer registrations, and user management. All endpoints require admin authentication."
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3001",
+			"type": "string"
+		}
+	]
+}
+
