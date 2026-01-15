@@ -11,11 +11,44 @@ import adminRoutes from './routes/admin.routes.js';
 const app = express();
 const PORT = env.PORT;
 
+// CORS configuration - support multiple origins
+const getAllowedOrigins = (): string[] => {
+  // If CORS_ORIGINS is set, use it (comma-separated)
+  if (process.env.CORS_ORIGINS) {
+    return process.env.CORS_ORIGINS.split(',').map(origin => origin.trim());
+  }
+  // Otherwise, use CORS_ORIGIN (single origin)
+  return [env.CORS_ORIGIN];
+};
+
+const allowedOrigins = getAllowedOrigins();
+
 // Middleware
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      // Check if the origin is in the allowed list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // In development, allow localhost with any port
+      if (env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
+        return callback(null, true);
+      }
+      
+      // Reject the request
+      console.warn(`CORS: Origin ${origin} not allowed. Allowed origins: ${allowedOrigins.join(', ')}`);
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 app.use(express.json());

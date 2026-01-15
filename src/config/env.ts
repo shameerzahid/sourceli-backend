@@ -12,6 +12,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('1h'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  // Allow multiple origins separated by commas
+  CORS_ORIGINS: z.string().optional(),
   // Cloudinary configuration
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
@@ -27,6 +29,10 @@ function validateEnv() {
       error.errors.forEach((err) => {
         console.error(`  - ${err.path.join('.')}: ${err.message}`);
       });
+      // In serverless environments, don't exit process - throw error instead
+      if (process.env.VERCEL) {
+        throw new Error(`Missing required environment variables: ${error.errors.map(e => e.path.join('.')).join(', ')}`);
+      }
       process.exit(1);
     }
     throw error;

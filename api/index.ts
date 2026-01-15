@@ -1,6 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+
+// Initialize Prisma client first (required for serverless)
+import '../src/config/database.js';
+
 import { env } from '../src/config/env.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 
@@ -10,11 +14,44 @@ import adminRoutes from '../src/routes/admin.routes.js';
 
 const app = express();
 
+// CORS configuration - support multiple origins
+const getAllowedOrigins = (): string[] => {
+  // If CORS_ORIGINS is set, use it (comma-separated)
+  if (env.CORS_ORIGINS) {
+    return env.CORS_ORIGINS.split(',').map(origin => origin.trim());
+  }
+  // Otherwise, use CORS_ORIGIN (single origin)
+  return [env.CORS_ORIGIN];
+};
+
+const allowedOrigins = getAllowedOrigins();
+
 // Middleware
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      // Check if the origin is in the allowed list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // In development, allow localhost with any port
+      if (env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
+        return callback(null, true);
+      }
+      
+      // Reject the request
+      console.warn(`CORS: Origin ${origin} not allowed. Allowed origins: ${allowedOrigins.join(', ')}`);
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 app.use(express.json());
@@ -43,6 +80,16 @@ app.use('/api', apiLimiter);
 
 // Health check endpoint (no rate limiting)
 app.get('/health', (_req: express.Request, res: express.Response) => {
+  res.json({
+    status: 'ok',
+    message: 'Sourceli API is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+  });
+});
+
+// Root endpoint for Vercel
+app.get('/', (_req: express.Request, res: express.Response) => {
   res.json({
     status: 'ok',
     message: 'Sourceli API is running',
@@ -101,4 +148,3 @@ app.use(errorHandler);
 
 // Export the Express app for Vercel serverless function
 export default app;
-
