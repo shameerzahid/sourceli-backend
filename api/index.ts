@@ -20,40 +20,67 @@ const getAllowedOrigins = (): string[] => {
   if (env.CORS_ORIGINS) {
     return env.CORS_ORIGINS.split(',').map(origin => origin.trim());
   }
+  
+  // In production on Vercel, also allow common Vercel frontend patterns
+  if (env.NODE_ENV === 'production' && process.env.VERCEL) {
+    const origins = [env.CORS_ORIGIN];
+    // Allow any vercel.app subdomain (for preview deployments)
+    if (process.env.VERCEL_URL) {
+      origins.push(`https://${process.env.VERCEL_URL}`);
+    }
+    return origins;
+  }
+  
   // Otherwise, use CORS_ORIGIN (single origin)
   return [env.CORS_ORIGIN];
 };
 
 const allowedOrigins = getAllowedOrigins();
+console.log('CORS Allowed Origins:', allowedOrigins);
+console.log('CORS_ORIGINS env var:', process.env.CORS_ORIGINS);
+console.log('CORS_ORIGIN env var:', process.env.CORS_ORIGIN);
 
-// Middleware
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) {
-        return callback(null, true);
-      }
-      
-      // Check if the origin is in the allowed list
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      
-      // In development, allow localhost with any port
-      if (env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
-        return callback(null, true);
-      }
-      
-      // Reject the request
-      console.warn(`CORS: Origin ${origin} not allowed. Allowed origins: ${allowedOrigins.join(', ')}`);
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+// CORS middleware with explicit OPTIONS handling
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if the origin is in the allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // In development, allow localhost with any port
+    if (env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
+      return callback(null, true);
+    }
+    
+    // In production on Vercel, allow any vercel.app subdomain
+    if (env.NODE_ENV === 'production' && process.env.VERCEL && origin.includes('.vercel.app')) {
+      return callback(null, true);
+    }
+    
+    // Reject the request
+    console.warn(`CORS: Origin ${origin} not allowed. Allowed origins: ${allowedOrigins.join(', ')}`);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Explicitly handle OPTIONS requests for all routes
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -66,13 +93,14 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// General API rate limiter
+// General API rate limiter (skip OPTIONS requests for CORS preflight)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS', // Skip rate limiting for OPTIONS requests
 });
 
 // Apply general rate limiting to all API routes
