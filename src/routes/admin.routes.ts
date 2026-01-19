@@ -15,7 +15,20 @@ import {
   updateFarmerStatusHandler,
   updateBuyerStatusHandler,
   getAdminStatsHandler,
+  getPendingOrdersHandler,
+  approveOrderHandler,
+  rejectOrderHandler,
 } from '../controllers/admin.controller.js';
+import {
+  getAllocationDataHandler,
+  createAssignmentsHandler,
+  updateAssignmentHandler,
+  deleteAssignmentHandler,
+} from '../controllers/allocation.controller.js';
+import {
+  recordPaymentHandler,
+  getPaymentReportsHandler,
+} from '../controllers/payment.controller.js';
 
 const router = Router();
 
@@ -51,6 +64,21 @@ router.get('/farmers', getAllFarmersHandler);
 router.put('/farmers/:id/status', updateFarmerStatusHandler);
 router.get('/buyers', getAllBuyersHandler);
 router.put('/buyers/:id/status', updateBuyerStatusHandler);
+
+// Order Management
+router.get('/orders/pending', getPendingOrdersHandler);
+router.post('/orders/:id/approve', approveOrderHandler);
+router.post('/orders/:id/reject', rejectOrderHandler);
+
+// Allocation Management
+router.get('/allocations', getAllocationDataHandler);
+router.post('/allocations', createAssignmentsHandler);
+router.put('/allocations/:id', updateAssignmentHandler);
+router.delete('/allocations/:id', deleteAssignmentHandler);
+
+// Payment Management
+router.post('/payments', recordPaymentHandler);
+router.get('/payments', getPaymentReportsHandler);
 
 export default router;
 

@@ -16,6 +16,11 @@ import {
   getAdminStats,
 } from '../services/admin.service.js';
 import {
+  getPendingOrders,
+  approveOrder,
+  rejectOrder,
+} from '../services/order.service.js';
+import {
   approveFarmerSchema,
   rejectFarmerSchema,
   approveBuyerSchema,
@@ -380,6 +385,95 @@ export const getAdminStatsHandler = wrapAsync(
       console.error("Error in getAdminStatsHandler:", error);
       throw error;
     }
+  }
+);
+
+/**
+ * Get all pending orders
+ */
+export const getPendingOrdersHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const orders = await getPendingOrders();
+
+    res.json({
+      success: true,
+      data: orders,
+      count: orders.length,
+    });
+  }
+);
+
+/**
+ * Approve an order
+ */
+export const approveOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.userId;
+
+    const adminNotes = req.body.adminNotes;
+
+    const order = await approveOrder(id, adminId, adminNotes);
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'ORDER_APPROVED',
+      entityType: 'Order',
+      entityId: id,
+      details: {
+        orderId: id,
+        buyerId: order.buyerId,
+        adminNotes,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Order approved successfully',
+      data: order,
+    });
+  }
+);
+
+/**
+ * Reject an order
+ */
+export const rejectOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.userId;
+
+    const { rejectionReason } = req.body;
+
+    if (!rejectionReason || typeof rejectionReason !== 'string' || rejectionReason.trim().length === 0) {
+      res.status(400).json({
+        error: 'Bad Request',
+        message: 'Rejection reason is required',
+      });
+      return;
+    }
+
+    const order = await rejectOrder(id, adminId, rejectionReason);
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'ORDER_REJECTED',
+      entityType: 'Order',
+      entityId: id,
+      details: {
+        orderId: id,
+        buyerId: order.buyerId,
+        rejectionReason,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Order rejected',
+      data: order,
+    });
   }
 );
 

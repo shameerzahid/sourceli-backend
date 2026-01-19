@@ -7,6 +7,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 // Import routes
 import authRoutes from './routes/auth.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import systemRoutes from './routes/system.routes.js';
+import farmerRoutes from './routes/farmer.routes.js';
+import buyerRoutes from './routes/buyer.routes.js';
 
 const app = express();
 const PORT = env.PORT;
@@ -105,6 +108,9 @@ app.get('/api', (_req: express.Request, res: express.Response) => {
         resetPassword: 'POST /api/auth/reset-password',
         changePassword: 'POST /api/auth/change-password',
       },
+      system: {
+        produceCategories: 'GET /api/system/produce-categories',
+      },
     },
   });
 });
@@ -121,6 +127,15 @@ app.use('/api/admin', (req, res, next) => {
 
 // Admin routes (protected by authentication and RBAC middleware)
 app.use('/api/admin', adminRoutes);
+
+// System routes (public - no authentication required)
+app.use('/api/system', systemRoutes);
+
+// Farmer routes (protected by authentication and farmer role)
+app.use('/api/farmers', farmerRoutes);
+
+// Buyer routes (protected by authentication and buyer role)
+app.use('/api/buyers', buyerRoutes);
 
 // 404 handler
 app.use((_req: express.Request, res: express.Response) => {

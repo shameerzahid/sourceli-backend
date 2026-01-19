@@ -70,6 +70,29 @@ async function main() {
   console.log('   - ADMIN_EMAIL=your@email.com');
   console.log('   - ADMIN_PHONE=+1234567890');
   console.log('   - ADMIN_PASSWORD=YourSecurePassword\n');
+
+  // Seed produce categories
+  console.log('🌾 Seeding produce categories...');
+  const produceCategories = [
+    { name: 'Rabbit', unitType: 'units' },
+    // Add more categories as needed
+  ];
+
+  for (const category of produceCategories) {
+    const existing = await prisma.produceCategory.findUnique({
+      where: { name: category.name },
+    });
+
+    if (!existing) {
+      await prisma.produceCategory.create({
+        data: category,
+      });
+      console.log(`   ✅ Created category: ${category.name} (${category.unitType})`);
+    } else {
+      console.log(`   ⏭️  Category already exists: ${category.name}`);
+    }
+  }
+  console.log('✅ Produce categories seeded\n');
 }
 
 main()
