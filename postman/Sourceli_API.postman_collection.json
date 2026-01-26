@@ -1,8 +1,8 @@
 {
 	"info": {
 		"_postman_id": "sourceli-api-v1",
-		"name": "Sourceli API - Milestone 1",
-		"description": "Postman collection for Sourceli B2B Fresh Produce Marketplace API\n\nBase URL: http://localhost:3001\n\nThis collection includes all authentication endpoints for Milestone 1.\n\n**Important:**\n- Farmer registration requires multipart/form-data with photos\n- Buyer registration uses JSON\n- Cloudinary must be configured for photo uploads\n- See CLOUDINARY_SETUP.md for configuration",
+		"name": "Sourceli API - Milestone 1 & 2",
+		"description": "Postman collection for Sourceli B2B Fresh Produce Marketplace API\n\nBase URL: http://localhost:3001\n\nThis collection includes all endpoints for Milestone 1 and Milestone 2.\n\n**Milestone 1:**\n- Authentication & Authorization\n- User Registration (Farmer/Buyer)\n- Admin Panel (User Management)\n\n**Milestone 2:**\n- Farmer Availability Submission\n- Buyer Order Placement\n- Admin Allocation System\n- Payment Tracking\n- Delivery Assignments\n\n**Important:**\n- Farmer registration requires multipart/form-data with photos\n- Buyer registration uses JSON\n- Cloudinary must be configured for photo uploads\n- All protected endpoints require Bearer token in Authorization header",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -482,6 +482,32 @@
 		{
 			"name": "Admin",
 			"item": [
+				{
+					"name": "Dashboard Stats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/stats",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"stats"
+							]
+						},
+						"description": "Get admin dashboard statistics: pending applications, pending registrations, active farmers, active buyers."
+					},
+					"response": []
+				},
 				{
 					"name": "Farmer Applications",
 					"item": [
@@ -966,6 +992,861 @@
 				}
 			],
 			"description": "Admin endpoints for managing farmer applications, buyer registrations, and user management. All endpoints require admin authentication."
+		},
+		{
+			"name": "System",
+			"item": [
+				{
+					"name": "Get Produce Categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/system/produce-categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"system",
+								"produce-categories"
+							]
+						},
+						"description": "Get all produce categories (public endpoint, no authentication required). Used for order forms and availability submissions."
+					},
+					"response": []
+				}
+			],
+			"description": "System endpoints - public endpoints that don't require authentication"
+		},
+		{
+			"name": "Farmer",
+			"item": [
+				{
+					"name": "Availability",
+					"item": [
+						{
+							"name": "Submit Weekly Availability",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"productType\": \"Rabbit\",\n  \"quantityAvailable\": 50,\n  \"avgWeight\": 2.5,\n  \"readyDate\": \"2024-01-25T00:00:00.000Z\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/farmers/availability",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"farmers",
+										"availability"
+									]
+								},
+								"description": "Submit weekly availability. Submission window: Monday-Tuesday. Late submissions are automatically marked."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Availability History",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/farmers/availability?limit=20",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"farmers",
+										"availability"
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "20",
+											"description": "Limit number of results (default: 20)"
+										}
+									]
+								},
+								"description": "Get availability history with current week status. Includes submission window information."
+							},
+							"response": []
+						}
+					],
+					"description": "Farmer availability management - submit and view weekly availability"
+				},
+				{
+					"name": "Delivery Assignments",
+					"item": [
+						{
+							"name": "Get All Delivery Assignments",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/farmers/deliveries?status=PENDING&upcomingOnly=true",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"farmers",
+										"deliveries"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "PENDING",
+											"description": "Filter by status: PENDING, DELIVERED, FAILED",
+											"disabled": true
+										},
+										{
+											"key": "upcomingOnly",
+											"value": "true",
+											"description": "Show only upcoming deliveries",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get all delivery assignments for the authenticated farmer. Ordered chronologically by delivery date."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Delivery Assignment by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/farmers/deliveries/{{assignmentId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"farmers",
+										"deliveries",
+										"{{assignmentId}}"
+									]
+								},
+								"description": "Get specific delivery assignment details. Buyer contact info is anonymized."
+							},
+							"response": []
+						}
+					],
+					"description": "View delivery assignments - read-only access to assigned deliveries"
+				},
+				{
+					"name": "Payments",
+					"item": [
+						{
+							"name": "Get Payment History",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/farmers/payments",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"farmers",
+										"payments"
+									]
+								},
+								"description": "Get payment history (read-only). Includes payment records and outstanding balance."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Outstanding Balance",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/farmers/payments/balance",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"farmers",
+										"payments",
+										"balance"
+									]
+								},
+								"description": "Get outstanding balance summary (total owed, total paid, outstanding balance)."
+							},
+							"response": []
+						}
+					],
+					"description": "Payment tracking - view payment history and outstanding balance (read-only)"
+				}
+			],
+			"description": "Farmer endpoints - requires farmer authentication and role"
+		},
+		{
+			"name": "Buyer",
+			"item": [
+				{
+					"name": "Delivery Addresses",
+					"item": [
+						{
+							"name": "Get All Delivery Addresses",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/buyers/delivery-addresses",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"buyers",
+										"delivery-addresses"
+									]
+								},
+								"description": "Get all delivery addresses for the authenticated buyer. Default address is listed first."
+							},
+							"response": []
+						},
+						{
+							"name": "Create Delivery Address",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"address\": \"456 Business Street, City, State 54321\",\n  \"landmark\": \"Behind Main Mall\",\n  \"isDefault\": false\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/buyers/delivery-addresses",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"buyers",
+										"delivery-addresses"
+									]
+								},
+								"description": "Create a new delivery address. If set as default, other addresses are unset as default."
+							},
+							"response": []
+						},
+						{
+							"name": "Update Delivery Address",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"address\": \"456 Business Street, Updated Address\",\n  \"landmark\": \"Near New Mall\",\n  \"isDefault\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/buyers/delivery-addresses/{{deliveryAddressId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"buyers",
+										"delivery-addresses",
+										"{{deliveryAddressId}}"
+									]
+								},
+								"description": "Update a delivery address. Can update address, landmark, or set as default."
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Delivery Address",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/buyers/delivery-addresses/{{deliveryAddressId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"buyers",
+										"delivery-addresses",
+										"{{deliveryAddressId}}"
+									]
+								},
+								"description": "Delete a delivery address. Cannot delete if address is used in existing orders."
+							},
+							"response": []
+						}
+					],
+					"description": "Manage delivery addresses - CRUD operations"
+				},
+				{
+					"name": "Orders",
+					"item": [
+						{
+							"name": "Create Order",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 201) {",
+											"    const response = pm.response.json();",
+											"    pm.environment.set(\"orderId\", response.data.id);",
+											"    console.log(`Order created: ${response.data.id}`);",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"productType\": \"Rabbit\",\n  \"quantity\": 25,\n  \"orderType\": \"ONE_TIME\",\n  \"deliveryDate\": \"2024-01-30T00:00:00.000Z\",\n  \"deliveryAddressId\": \"{{deliveryAddressId}}\",\n  \"notes\": \"Please deliver in the morning if possible\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/buyers/orders",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"buyers",
+										"orders"
+									]
+								},
+								"description": "Create a one-time order. Order status starts as PENDING, requires admin approval."
+							},
+							"response": []
+						},
+						{
+							"name": "Get All Orders",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/buyers/orders?status=PENDING&limit=50",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"buyers",
+										"orders"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "PENDING",
+											"description": "Filter by status: PENDING, APPROVED, ALLOCATION, DELIVERED, FAILED, REJECTED",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "50",
+											"description": "Limit number of results (default: 50)",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get all orders for the authenticated buyer. Includes order history with status."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Order by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/buyers/orders/{{orderId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"buyers",
+										"orders",
+										"{{orderId}}"
+									]
+								},
+								"description": "Get specific order details including delivery assignments and status."
+							},
+							"response": []
+						}
+					],
+					"description": "Order management - create and view orders"
+				}
+			],
+			"description": "Buyer endpoints - requires buyer authentication and role"
+		},
+		{
+			"name": "Admin - Milestone 2",
+			"item": [
+				{
+					"name": "Order Management",
+					"item": [
+						{
+							"name": "Get Pending Orders",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/orders/pending",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"orders",
+										"pending"
+									]
+								},
+								"description": "Get all pending orders awaiting admin review. Ordered by creation date (oldest first)."
+							},
+							"response": []
+						},
+						{
+							"name": "Approve Order",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    const response = pm.response.json();",
+											"    pm.environment.set(\"approvedOrderId\", response.data.id);",
+											"    console.log(`Order approved: ${response.data.id}`);",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"adminNotes\": \"Order approved. Ready for allocation.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/orders/{{orderId}}/approve",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"orders",
+										"{{orderId}}",
+										"approve"
+									]
+								},
+								"description": "Approve an order. Changes status from PENDING to ALLOCATION. Order becomes available for allocation."
+							},
+							"response": []
+						},
+						{
+							"name": "Reject Order",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"rejectionReason\": \"Order quantity exceeds available supply. Please reduce quantity and resubmit.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/orders/{{orderId}}/reject",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"orders",
+										"{{orderId}}",
+										"reject"
+									]
+								},
+								"description": "Reject an order. Changes status to REJECTED. Requires rejection reason."
+							},
+							"response": []
+						}
+					],
+					"description": "Order review and approval - review pending orders and approve/reject"
+				},
+				{
+					"name": "Allocation",
+					"item": [
+						{
+							"name": "Get Allocation Data",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/allocations",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"allocations"
+									]
+								},
+								"description": "Get allocation screen data: pending orders (status: ALLOCATION) and available farmers with their current week availability."
+							},
+							"response": []
+						},
+						{
+							"name": "Create Delivery Assignments",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 201) {",
+											"    const response = pm.response.json();",
+											"    console.log(`Assignments created: ${response.data.assignments.length}`);",
+											"    console.log(`Total assigned: ${response.data.totalAssigned}`);",
+											"    console.log(`Remaining: ${response.data.remainingQuantity}`);",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"orderId\": \"{{approvedOrderId}}\",\n  \"assignments\": [\n    {\n      \"farmerId\": \"{{farmerId}}\",\n      \"assignedQuantity\": 15\n    },\n    {\n      \"farmerId\": \"{{farmerId2}}\",\n      \"assignedQuantity\": 10\n    }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/allocations",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"allocations"
+									]
+								},
+								"description": "Create delivery assignments for an order. Can assign multiple farmers to a single order. Total assigned quantity must not exceed order quantity."
+							},
+							"response": []
+						},
+						{
+							"name": "Update Assignment",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"assignedQuantity\": 20\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/allocations/{{assignmentId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"allocations",
+										"{{assignmentId}}"
+									]
+								},
+								"description": "Update assignment quantity. Can only update if status is PENDING. Validates total doesn't exceed order quantity."
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Assignment",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/allocations/{{assignmentId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"allocations",
+										"{{assignmentId}}"
+									]
+								},
+								"description": "Delete an assignment. Can only delete if status is PENDING."
+							},
+							"response": []
+						}
+					],
+					"description": "Manual allocation system - allocate farmer supply to orders"
+				},
+				{
+					"name": "Payment Tracking",
+					"item": [
+						{
+							"name": "Record Offline Payment",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"farmerId\": \"{{farmerId}}\",\n  \"deliveryAssignmentId\": \"{{assignmentId}}\",\n  \"amountPaid\": 1500.00,\n  \"paymentMethod\": \"BANK_TRANSFER\",\n  \"paymentDate\": \"2024-01-20T00:00:00.000Z\",\n  \"notes\": \"Payment received via bank transfer. Reference: TXN123456\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/payments",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"payments"
+									]
+								},
+								"description": "Record an offline payment received from a farmer. Payment methods: BANK_TRANSFER, MOBILE_MONEY, CASH, OTHER."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Payment Reports",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/admin/payments?farmerId={{farmerId}}&paymentStatus=PAID&startDate=2024-01-01&endDate=2024-01-31",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"admin",
+										"payments"
+									],
+									"query": [
+										{
+											"key": "farmerId",
+											"value": "{{farmerId}}",
+											"description": "Filter by farmer ID",
+											"disabled": true
+										},
+										{
+											"key": "paymentStatus",
+											"value": "PAID",
+											"description": "Filter by status: NOT_PAID, PARTIALLY_PAID, PAID",
+											"disabled": true
+										},
+										{
+											"key": "startDate",
+											"value": "2024-01-01",
+											"description": "Filter by start date (ISO format)",
+											"disabled": true
+										},
+										{
+											"key": "endDate",
+											"value": "2024-01-31",
+											"description": "Filter by end date (ISO format)",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get payment reports with optional filters. Returns payments and summary statistics."
+							},
+							"response": []
+						}
+					],
+					"description": "Payment tracking - record offline payments and generate reports"
+				}
+			],
+			"description": "Admin endpoints for Milestone 2 - order management, allocation, and payment tracking"
 		}
 	],
 	"variable": [

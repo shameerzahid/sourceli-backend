@@ -48,3 +48,4 @@ export const paymentReportFiltersSchema = z.object({
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 export type PaymentReportFiltersInput = z.infer<typeof paymentReportFiltersSchema>;
 
+

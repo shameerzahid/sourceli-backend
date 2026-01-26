@@ -35,3 +35,4 @@ export type AllocationAssignmentInput = z.infer<typeof allocationAssignmentSchem
 export type CreateAllocationInput = z.infer<typeof createAllocationSchema>;
 export type UpdateAssignmentInput = z.infer<typeof updateAssignmentSchema>;
 
+

@@ -28,3 +28,4 @@ export const weeklyAvailabilitySchema = z.object({
 
 export type WeeklyAvailabilityInput = z.infer<typeof weeklyAvailabilitySchema>;
 
+
