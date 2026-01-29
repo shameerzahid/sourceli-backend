@@ -194,24 +194,17 @@ export async function getDeliveryAssignments(
     deliveryDate: assignment.deliveryDate,
     status: assignment.status,
     createdAt: assignment.createdAt,
-    deliveryAddress: {
-      id: assignment.deliveryAddress.id,
+    orderProductType: assignment.order.productType,
+    orderQuantity: assignment.order.quantity,
+    orderType: assignment.order.orderType,
+    orderNotes: assignment.order.notes,
+    deliveryAddressDetails: {
       address: assignment.deliveryAddress.address,
       landmark: assignment.deliveryAddress.landmark,
     },
-    order: {
-      id: assignment.order.id,
-      productType: assignment.order.productType,
-      quantity: assignment.order.quantity,
-      orderType: assignment.order.orderType,
-      deliveryDate: assignment.order.deliveryDate,
-      status: assignment.order.status,
-      notes: assignment.order.notes,
-      // Buyer info is anonymized - only show buyer type, not personal details
-      buyer: {
-        buyerType: assignment.order.buyer.buyerType,
-        // Don't expose buyer contact info to farmers
-      },
+    buyerInfo: {
+      buyerType: assignment.order.buyer.buyerType,
+      // Don't expose buyer contact info to farmers
     },
   }));
 }
@@ -265,23 +258,17 @@ export async function getAssignmentById(
     deliveryDate: assignment.deliveryDate,
     status: assignment.status,
     createdAt: assignment.createdAt,
-    deliveryAddress: {
-      id: assignment.deliveryAddress.id,
+    orderProductType: assignment.order.productType,
+    orderQuantity: assignment.order.quantity,
+    orderType: assignment.order.orderType,
+    orderNotes: assignment.order.notes,
+    deliveryAddressDetails: {
       address: assignment.deliveryAddress.address,
       landmark: assignment.deliveryAddress.landmark,
     },
-    order: {
-      id: assignment.order.id,
-      productType: assignment.order.productType,
-      quantity: assignment.order.quantity,
-      orderType: assignment.order.orderType,
-      deliveryDate: assignment.order.deliveryDate,
-      status: assignment.order.status,
-      notes: assignment.order.notes,
-      buyer: {
-        buyerType: assignment.order.buyer.buyerType,
-        // Don't expose buyer contact info to farmers
-      },
+    buyerInfo: {
+      buyerType: assignment.order.buyer.buyerType,
+      // Don't expose buyer contact info to farmers
     },
   };
 }

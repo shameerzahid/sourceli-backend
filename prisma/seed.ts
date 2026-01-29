@@ -36,46 +36,54 @@ async function main() {
       });
       console.log('🔐 Admin password updated\n');
     }
-    
-    return;
+  } else {
+    // Hash password
+    console.log('🔐 Hashing admin password...');
+    const passwordHash = await hashPassword(adminPassword);
+
+    // Create admin user
+    console.log('👤 Creating admin user...');
+    const admin = await prisma.user.create({
+      data: {
+        email: adminEmail,
+        phone: adminPhone,
+        passwordHash,
+        role: UserRole.ADMIN,
+        status: UserStatus.ACTIVE, // Admin is immediately active
+      },
+    });
+
+    console.log('\n✅ Admin user created successfully!');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 Email:', admin.email);
+    console.log('📱 Phone:', adminPhone);
+    console.log('🔑 Password:', adminPassword);
+    console.log('👤 Role:', admin.role);
+    console.log('✅ Status:', admin.status);
+    console.log('🆔 User ID:', admin.id);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('\n⚠️  IMPORTANT: Change the default password after first login!');
+    console.log('   You can set custom credentials using environment variables:');
+    console.log('   - ADMIN_EMAIL=your@email.com');
+    console.log('   - ADMIN_PHONE=+1234567890');
+    console.log('   - ADMIN_PASSWORD=YourSecurePassword\n');
   }
 
-  // Hash password
-  console.log('🔐 Hashing admin password...');
-  const passwordHash = await hashPassword(adminPassword);
-
-  // Create admin user
-  console.log('👤 Creating admin user...');
-  const admin = await prisma.user.create({
-    data: {
-      email: adminEmail,
-      phone: adminPhone,
-      passwordHash,
-      role: UserRole.ADMIN,
-      status: UserStatus.ACTIVE, // Admin is immediately active
-    },
-  });
-
-  console.log('\n✅ Admin user created successfully!');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('📧 Email:', admin.email);
-  console.log('📱 Phone:', adminPhone);
-  console.log('🔑 Password:', adminPassword);
-  console.log('👤 Role:', admin.role);
-  console.log('✅ Status:', admin.status);
-  console.log('🆔 User ID:', admin.id);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('\n⚠️  IMPORTANT: Change the default password after first login!');
-  console.log('   You can set custom credentials using environment variables:');
-  console.log('   - ADMIN_EMAIL=your@email.com');
-  console.log('   - ADMIN_PHONE=+1234567890');
-  console.log('   - ADMIN_PASSWORD=YourSecurePassword\n');
-
-  // Seed produce categories
+  // Seed produce categories (always run, even if admin exists)
   console.log('🌾 Seeding produce categories...');
   const produceCategories = [
     { name: 'Rabbit', unitType: 'units' },
-    // Add more categories as needed
+    { name: 'Chicken', unitType: 'units' },
+    { name: 'Eggs', unitType: 'units' },
+    { name: 'Goat', unitType: 'units' },
+    { name: 'Sheep', unitType: 'units' },
+    { name: 'Cattle', unitType: 'units' },
+    { name: 'Pork', unitType: 'kg' },
+    { name: 'Fish', unitType: 'kg' },
+    { name: 'Vegetables', unitType: 'kg' },
+    { name: 'Fruits', unitType: 'kg' },
+    { name: 'Grains', unitType: 'kg' },
+    { name: 'Other', unitType: 'kg' },
   ];
 
   for (const category of produceCategories) {

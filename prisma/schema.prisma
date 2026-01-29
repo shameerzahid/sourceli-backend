@@ -49,6 +49,12 @@ enum AssignmentStatus {
   FAILED
 }
 
+enum QualityResult {
+  PASS
+  PARTIAL
+  FAIL
+}
+
 enum PaymentStatus {
   NOT_PAID
   PARTIALLY_PAID
@@ -284,6 +290,13 @@ model DeliveryAssignment {
   deliveryAddressId String           @map("delivery_address_id")
   status            AssignmentStatus @default(PENDING)
   createdAt         DateTime         @default(now()) @map("created_at")
+  
+  // Delivery confirmation fields (US-ADMIN-008)
+  quantityDelivered Int?             @map("quantity_delivered")
+  qualityResult     QualityResult?    @map("quality_result")
+  confirmationNotes String?           @map("confirmation_notes")
+  confirmedBy       String?           @map("confirmed_by")
+  confirmedAt       DateTime?         @map("confirmed_at")
   
   order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
   farmer            Farmer           @relation(fields: [farmerId], references: [id], onDelete: Cascade)

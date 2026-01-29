@@ -1,6 +1,6 @@
 import { prisma } from '../config/database.js';
 import { createError } from '../middleware/errorHandler.js';
-import { OrderStatus, AssignmentStatus, UserStatus } from '@prisma/client';
+import { OrderStatus, AssignmentStatus, UserStatus, QualityResult } from '@prisma/client';
 import { getWeekStartDate } from '../utils/weekCalculation.js';
 
 export interface AllocationAssignment {
@@ -35,6 +35,17 @@ export async function getAllocationData() {
         },
       },
       deliveryAddress: true,
+      assignments: {
+        include: {
+          farmer: {
+            select: {
+              id: true,
+              fullName: true,
+              farmName: true,
+            },
+          },
+        },
+      },
     },
     orderBy: {
       deliveryDate: 'asc',
@@ -79,13 +90,16 @@ export async function getAllocationData() {
       region: farmer.region,
       town: farmer.town,
       produceCategory: farmer.produceCategory,
+      feedingMethod: farmer.feedingMethod,
+      userStatus: farmer.user.status,
       weeklyCapacityMin: farmer.weeklyCapacityMin,
       weeklyCapacityMax: farmer.weeklyCapacityMax,
-      availability: availability.map((av) => ({
+      weeklyAvailability: availability.map((av) => ({
+        id: av.id,
         productType: av.productType,
         quantityAvailable: av.quantityAvailable,
         avgWeight: av.avgWeight,
-        readyDate: av.readyDate,
+        readyDate: av.readyDate.toISOString(),
         isLate: av.isLate,
       })),
       user: farmer.user,
@@ -93,8 +107,8 @@ export async function getAllocationData() {
   });
 
   return {
-    orders,
-    farmers: farmersWithAvailability,
+    pendingOrders: orders,
+    availableFarmers: farmersWithAvailability,
     currentWeekStart,
   };
 }
@@ -345,4 +359,182 @@ export async function deleteAssignment(assignmentId: string, adminId: string) {
   return { success: true };
 }
 
+/**
+ * Confirm a delivery assignment (US-ADMIN-008)
+ * Admin confirms delivery and quality, updates assignment status
+ */
+export interface ConfirmDeliveryData {
+  delivered: boolean; // Yes/No
+  quantityDelivered?: number;
+  qualityResult?: 'PASS' | 'PARTIAL' | 'FAIL';
+  notes?: string;
+}
+
+export async function confirmDelivery(
+  assignmentId: string,
+  adminId: string,
+  data: ConfirmDeliveryData
+) {
+  const assignment = await prisma.deliveryAssignment.findUnique({
+    where: { id: assignmentId },
+    include: {
+      order: {
+        include: {
+          assignments: true,
+        },
+      },
+      farmer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!assignment) {
+    throw createError('Delivery assignment not found', 404, 'ASSIGNMENT_NOT_FOUND');
+  }
+
+  // Validate quantity delivered
+  if (data.delivered && data.quantityDelivered !== undefined) {
+    if (data.quantityDelivered < 0) {
+      throw createError(
+        'Quantity delivered cannot be negative',
+        400,
+        'INVALID_QUANTITY'
+      );
+    }
+    if (data.quantityDelivered > assignment.assignedQuantity) {
+      throw createError(
+        `Quantity delivered (${data.quantityDelivered}) cannot exceed assigned quantity (${assignment.assignedQuantity})`,
+        400,
+        'INVALID_QUANTITY'
+      );
+    }
+  }
+
+  // Update assignment status and confirmation fields
+  const status = data.delivered ? AssignmentStatus.DELIVERED : AssignmentStatus.FAILED;
+  
+  const updated = await prisma.deliveryAssignment.update({
+    where: { id: assignmentId },
+    data: {
+      status,
+      quantityDelivered: data.quantityDelivered ?? (data.delivered ? assignment.assignedQuantity : null),
+      qualityResult: data.qualityResult ?? null,
+      confirmationNotes: data.notes ?? null,
+      confirmedBy: adminId,
+      confirmedAt: new Date(),
+    },
+    include: {
+      order: {
+        include: {
+          assignments: true,
+        },
+      },
+      farmer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      deliveryAddress: true,
+    },
+  });
+
+  // Check if all assignments for this order are delivered
+  const allAssignments = updated.order.assignments;
+  const allDelivered = allAssignments.every(a => a.status === AssignmentStatus.DELIVERED);
+  const anyFailed = allAssignments.some(a => a.status === AssignmentStatus.FAILED);
+  
+  // Update order status if all deliveries are confirmed
+  if (allDelivered && allAssignments.length > 0) {
+    await prisma.order.update({
+      where: { id: updated.orderId },
+      data: {
+        status: OrderStatus.DELIVERED,
+      },
+    });
+  } else if (anyFailed && allAssignments.every(a => 
+    a.status === AssignmentStatus.DELIVERED || a.status === AssignmentStatus.FAILED
+  )) {
+    // If all assignments are either delivered or failed, mark order as delivered (partial delivery)
+    await prisma.order.update({
+      where: { id: updated.orderId },
+      data: {
+        status: OrderStatus.DELIVERED,
+      },
+    });
+  }
+
+  return updated;
+}
+
+/**
+ * Get all delivery assignments for admin (pending and completed)
+ */
+export async function getAllDeliveryAssignments(filters?: {
+  status?: AssignmentStatus;
+  orderId?: string;
+  farmerId?: string;
+}) {
+  const where: any = {};
+
+  if (filters?.status) {
+    where.status = filters.status;
+  }
+
+  if (filters?.orderId) {
+    where.orderId = filters.orderId;
+  }
+
+  if (filters?.farmerId) {
+    where.farmerId = filters.farmerId;
+  }
+
+  const assignments = await prisma.deliveryAssignment.findMany({
+    where,
+    include: {
+      order: {
+        include: {
+          buyer: {
+            include: {
+              user: {
+                select: {
+                  email: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      farmer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      deliveryAddress: true,
+    },
+    orderBy: {
+      deliveryDate: 'asc',
+    },
+  });
+
+  return assignments;
+}
 

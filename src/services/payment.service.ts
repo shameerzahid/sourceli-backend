@@ -71,11 +71,14 @@ export async function recordPayment(
     throw createError('Farmer not found', 404, 'FARMER_NOT_FOUND');
   }
 
+  // Normalize deliveryAssignmentId - convert empty string to null
+  const deliveryAssignmentId = data.deliveryAssignmentId?.trim() || null;
+
   // If delivery assignment is provided, verify it exists and belongs to farmer
-  if (data.deliveryAssignmentId) {
+  if (deliveryAssignmentId) {
     const assignment = await prisma.deliveryAssignment.findFirst({
       where: {
-        id: data.deliveryAssignmentId,
+        id: deliveryAssignmentId,
         farmerId: data.farmerId,
       },
     });
@@ -118,14 +121,14 @@ export async function recordPayment(
   const payment = await prisma.payment.create({
     data: {
       farmerId: data.farmerId,
-      deliveryAssignmentId: data.deliveryAssignmentId,
+      deliveryAssignmentId: deliveryAssignmentId, // Use normalized value (null if empty)
       amountOwed: amountOwed,
       amountPaid: data.amountPaid,
       paymentStatus,
       paymentMethod: data.paymentMethod,
       paymentDate: data.paymentDate,
       recordedBy: adminId,
-      notes: data.notes?.trim(),
+      notes: data.notes?.trim() || null,
     },
     include: {
       farmer: {

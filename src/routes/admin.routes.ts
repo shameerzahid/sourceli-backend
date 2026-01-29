@@ -24,6 +24,8 @@ import {
   createAssignmentsHandler,
   updateAssignmentHandler,
   deleteAssignmentHandler,
+  getAllDeliveryAssignmentsHandler,
+  confirmDeliveryHandler,
 } from '../controllers/allocation.controller.js';
 import {
   recordPaymentHandler,
@@ -75,6 +77,10 @@ router.get('/allocations', getAllocationDataHandler);
 router.post('/allocations', createAssignmentsHandler);
 router.put('/allocations/:id', updateAssignmentHandler);
 router.delete('/allocations/:id', deleteAssignmentHandler);
+
+// Delivery Confirmation (US-ADMIN-008)
+router.get('/deliveries', getAllDeliveryAssignmentsHandler);
+router.post('/deliveries/:id/confirm', confirmDeliveryHandler);
 
 // Payment Management
 router.post('/payments', recordPaymentHandler);

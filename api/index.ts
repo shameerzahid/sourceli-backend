@@ -84,15 +84,6 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting for auth endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
-  message: 'Too many authentication attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // General API rate limiter (skip OPTIONS requests for CORS preflight)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -151,8 +142,8 @@ app.get('/api', (_req: express.Request, res: express.Response) => {
 });
 
 // API Routes
-// Apply stricter rate limiting to auth routes
-app.use('/api/auth', authLimiter, authRoutes);
+// Auth routes (no rate limiting)
+app.use('/api/auth', authRoutes);
 
 // Log all admin route requests
 app.use('/api/admin', (req, res, next) => {
