@@ -11,6 +11,9 @@ import { errorHandler } from '../src/middleware/errorHandler.js';
 // Import routes
 import authRoutes from '../src/routes/auth.routes.js';
 import adminRoutes from '../src/routes/admin.routes.js';
+import farmerRoutes from '../src/routes/farmer.routes.js';
+import buyerRoutes from '../src/routes/buyer.routes.js';
+import systemRoutes from '../src/routes/system.routes.js';
 
 const app = express();
 
@@ -153,6 +156,15 @@ app.use('/api/admin', (req, res, next) => {
 
 // Admin routes (protected by authentication and RBAC middleware)
 app.use('/api/admin', adminRoutes);
+
+// System routes (public - no authentication required)
+app.use('/api/system', systemRoutes);
+
+// Farmer routes (protected by authentication and farmer role)
+app.use('/api/farmers', farmerRoutes);
+
+// Buyer routes (protected by authentication and buyer role)
+app.use('/api/buyers', buyerRoutes);
 
 // 404 handler
 app.use((_req: express.Request, res: express.Response) => {
