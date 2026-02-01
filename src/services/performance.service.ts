@@ -392,12 +392,12 @@ export async function getPerformanceTrend(farmerId: string, days: number = 30) {
   });
 
   // Build trend data
-  const trend: Array<{ date: Date; score: number; tier: PerformanceTier }> = [];
+  const trend: Array<{ date: string; score: number; tier: PerformanceTier }> = [];
 
   // Add history points
   for (const entry of history) {
     trend.push({
-      date: entry.createdAt,
+      date: entry.createdAt.toISOString(),
       score: entry.newScore,
       tier: entry.newTier,
     });
@@ -406,14 +406,14 @@ export async function getPerformanceTrend(farmerId: string, days: number = 30) {
   // Add current point if exists
   if (current) {
     trend.push({
-      date: new Date(),
+      date: new Date().toISOString(),
       score: current.score,
       tier: current.tier,
     });
   }
 
   // Sort by date
-  trend.sort((a, b) => a.date.getTime() - b.date.getTime());
+  trend.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return trend;
 }

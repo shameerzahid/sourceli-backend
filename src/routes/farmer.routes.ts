@@ -50,15 +50,16 @@ router.get('/deliveries/:id', getAssignmentByIdHandler);
 
 /**
  * Farmer Performance Routes
+ * Note: More specific routes must come before less specific ones
  */
-// Get performance data
-router.get('/performance', getPerformanceHandler);
-
-// Get performance history
+// Get performance history (more specific - must come first)
 router.get('/performance/history', getPerformanceHistoryHandler);
 
-// Get performance trend
+// Get performance trend (more specific - must come first)
 router.get('/performance/trend', getPerformanceTrendHandler);
+
+// Get performance data (less specific - comes last)
+router.get('/performance', getPerformanceHandler);
 
 export default router;
 
