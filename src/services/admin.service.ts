@@ -442,6 +442,8 @@ export async function getAllFarmers(filters?: {
           reviewedAt: true,
         },
       },
+      performance: true,
+      performanceBreakdown: true,
     },
     orderBy: {
       user: {

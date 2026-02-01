@@ -19,7 +19,7 @@ enum UserStatus {
   SUSPENDED
   BLOCKED
   APPLIED
-  PROBATIONARY  // For farmers who are approved but in probation period
+  PROBATIONARY // For farmers who are approved but in probation period
 }
 
 enum BuyerType {
@@ -68,20 +68,26 @@ enum PaymentMethod {
   OTHER
 }
 
+enum PerformanceTier {
+  PROBATIONARY
+  STANDARD
+  PREFERRED
+}
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  phone         String    @unique
-  passwordHash  String    @map("password_hash")
-  role          UserRole
-  status        UserStatus @default(PENDING)
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  
-  farmer        Farmer?
-  buyer         Buyer?
-  auditLogs     AuditLog[]
-  
+  id           String     @id @default(cuid())
+  email        String     @unique
+  phone        String     @unique
+  passwordHash String     @map("password_hash")
+  role         UserRole
+  status       UserStatus @default(PENDING)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  farmer    Farmer?
+  buyer     Buyer?
+  auditLogs AuditLog[]
+
   @@index([email])
   @@index([phone])
   @@index([role])
@@ -91,26 +97,29 @@ model User {
 }
 
 model Farmer {
-  id                    String      @id @default(cuid())
-  userId                String      @unique
-  fullName              String      @map("full_name")
-  farmName              String?     @map("farm_name")
-  region                String
-  town                  String
-  weeklyCapacityMin     Int         @map("weekly_capacity_min")
-  weeklyCapacityMax     Int         @map("weekly_capacity_max")
-  produceCategory       String      @map("produce_category")
-  feedingMethod         String      @map("feeding_method")
-  verificationDate      DateTime?   @map("verification_date")
-  verificationAdminId   String?     @map("verification_admin_id")
-  
-  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application           FarmerApplication?
-  farmPhotos            FarmPhoto[]
-  weeklyAvailability    WeeklyAvailability[]
-  deliveryAssignments   DeliveryAssignment[]
-  payments              Payment[]
-  
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  fullName            String    @map("full_name")
+  farmName            String?   @map("farm_name")
+  region              String
+  town                String
+  weeklyCapacityMin   Int       @map("weekly_capacity_min")
+  weeklyCapacityMax   Int       @map("weekly_capacity_max")
+  produceCategory     String    @map("produce_category")
+  feedingMethod       String    @map("feeding_method")
+  verificationDate    DateTime? @map("verification_date")
+  verificationAdminId String?   @map("verification_admin_id")
+
+  user                 User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application          FarmerApplication?
+  farmPhotos           FarmPhoto[]
+  weeklyAvailability   WeeklyAvailability[]
+  deliveryAssignments  DeliveryAssignment[]
+  payments             Payment[]
+  performance          FarmerPerformance?
+  performanceHistory   FarmerPerformanceHistory[]
+  performanceBreakdown FarmerPerformanceBreakdown?
+
   @@index([userId])
   @@index([region])
   @@index([produceCategory])
@@ -118,102 +127,102 @@ model Farmer {
 }
 
 model Buyer {
-  id                String      @id @default(cuid())
-  userId            String      @unique
-  fullName          String      @map("full_name")
-  businessName      String?     @map("business_name")
-  buyerType         BuyerType   @map("buyer_type")
-  contactPerson     String      @map("contact_person")
-  estimatedVolume   Int?        @map("estimated_volume")
-  verificationDate  DateTime?   @map("verification_date")
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  fullName            String    @map("full_name")
+  businessName        String?   @map("business_name")
+  buyerType           BuyerType @map("buyer_type")
+  contactPerson       String    @map("contact_person")
+  estimatedVolume     Int?      @map("estimated_volume")
+  verificationDate    DateTime? @map("verification_date")
   verificationAdminId String?   @map("verification_admin_id")
-  
-  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   registration      BuyerRegistration?
   deliveryAddresses DeliveryAddress[]
   orders            Order[]
-  
+
   @@index([userId])
   @@index([buyerType])
   @@map("buyers")
 }
 
 model DeliveryAddress {
-  id          String   @id @default(cuid())
-  buyerId     String   @map("buyer_id")
-  address     String
-  landmark    String?
-  isDefault   Boolean  @default(false) @map("is_default")
-  createdAt   DateTime @default(now()) @map("created_at")
-  
-  buyer       Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  buyerId   String   @map("buyer_id")
+  address   String
+  landmark  String?
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  buyer       Buyer                @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   orders      Order[]
   assignments DeliveryAssignment[]
-  
+
   @@index([buyerId])
   @@index([buyerId, isDefault])
   @@map("delivery_addresses")
 }
 
 model FarmerApplication {
-  id              String      @id @default(cuid())
-  farmerId        String      @unique @map("farmer_id")
-  status          UserStatus  @default(APPLIED)
-  termsAccepted   Boolean     @default(false) @map("terms_accepted")
-  termsAcceptedAt DateTime?   @map("terms_accepted_at")
-  submittedAt     DateTime    @default(now()) @map("submitted_at")
-  reviewedAt      DateTime?   @map("reviewed_at")
-  adminNotes      String?     @map("admin_notes")
-  rejectionReason String?     @map("rejection_reason")
-  
-  farmer          Farmer      @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  
+  id              String     @id @default(cuid())
+  farmerId        String     @unique @map("farmer_id")
+  status          UserStatus @default(APPLIED)
+  termsAccepted   Boolean    @default(false) @map("terms_accepted")
+  termsAcceptedAt DateTime?  @map("terms_accepted_at")
+  submittedAt     DateTime   @default(now()) @map("submitted_at")
+  reviewedAt      DateTime?  @map("reviewed_at")
+  adminNotes      String?    @map("admin_notes")
+  rejectionReason String?    @map("rejection_reason")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
   @@index([status])
   @@index([submittedAt])
   @@map("farmer_applications")
 }
 
 model BuyerRegistration {
-  id              String      @id @default(cuid())
-  buyerId         String      @unique @map("buyer_id")
-  status          UserStatus  @default(PENDING)
-  submittedAt     DateTime    @default(now()) @map("submitted_at")
-  reviewedAt      DateTime?   @map("reviewed_at")
-  adminNotes      String?     @map("admin_notes")
-  rejectionReason String?     @map("rejection_reason")
-  
-  buyer           Buyer       @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  
+  id              String     @id @default(cuid())
+  buyerId         String     @unique @map("buyer_id")
+  status          UserStatus @default(PENDING)
+  submittedAt     DateTime   @default(now()) @map("submitted_at")
+  reviewedAt      DateTime?  @map("reviewed_at")
+  adminNotes      String?    @map("admin_notes")
+  rejectionReason String?    @map("rejection_reason")
+
+  buyer Buyer @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
   @@index([status])
   @@index([submittedAt])
   @@map("buyer_registrations")
 }
 
 model FarmPhoto {
-  id            String   @id @default(cuid())
-  farmerId      String   @map("farmer_id")
-  filePath      String   @map("file_path")
-  fileType      String   @map("file_type")
-  uploadedAt    DateTime @default(now()) @map("uploaded_at")
-  
-  farmer        Farmer   @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  farmerId   String   @map("farmer_id")
+  filePath   String   @map("file_path")
+  fileType   String   @map("file_type")
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
   @@index([farmerId])
   @@map("farm_photos")
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String?  @map("user_id")
-  actionType  String   @map("action_type")
-  entityType  String   @map("entity_type")
-  entityId    String?  @map("entity_id")
-  details     Json
-  timestamp   DateTime @default(now())
-  ipAddress   String?  @map("ip_address")
-  
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  actionType String   @map("action_type")
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  details    Json
+  timestamp  DateTime @default(now())
+  ipAddress  String?  @map("ip_address")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@index([actionType])
   @@index([entityType, entityId])
@@ -228,26 +237,26 @@ model ProduceCategory {
   name      String   @unique
   unitType  String   @map("unit_type") // e.g., "kg", "units"
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   // Note: Orders and WeeklyAvailability reference productType as String (category name)
   // This allows flexibility and doesn't require foreign key constraints
-  
+
   @@map("produce_categories")
 }
 
 model WeeklyAvailability {
-  id               String    @id @default(cuid())
-  farmerId         String    @map("farmer_id")
-  weekStartDate    DateTime  @map("week_start_date")
-  productType      String    @map("product_type")
+  id                String   @id @default(cuid())
+  farmerId          String   @map("farmer_id")
+  weekStartDate     DateTime @map("week_start_date")
+  productType       String   @map("product_type")
   quantityAvailable Int      @map("quantity_available")
-  avgWeight        Float?    @map("avg_weight")
-  readyDate        DateTime  @map("ready_date")
-  submittedAt      DateTime  @default(now()) @map("submitted_at")
-  isLate           Boolean   @default(false) @map("is_late")
-  
-  farmer           Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  
+  avgWeight         Float?   @map("avg_weight")
+  readyDate         DateTime @map("ready_date")
+  submittedAt       DateTime @default(now()) @map("submitted_at")
+  isLate            Boolean  @default(false) @map("is_late")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
   @@unique([farmerId, weekStartDate, productType])
   @@index([farmerId])
   @@index([weekStartDate])
@@ -269,11 +278,11 @@ model Order {
   approvedAt        DateTime?   @map("approved_at")
   approvedBy        String?     @map("approved_by")
   rejectionReason   String?     @map("rejection_reason")
-  
-  buyer             Buyer       @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  deliveryAddress   DeliveryAddress @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
-  assignments       DeliveryAssignment[]
-  
+
+  buyer           Buyer                @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  deliveryAddress DeliveryAddress      @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
+  assignments     DeliveryAssignment[]
+
   @@index([buyerId])
   @@index([status])
   @@index([deliveryDate])
@@ -290,19 +299,19 @@ model DeliveryAssignment {
   deliveryAddressId String           @map("delivery_address_id")
   status            AssignmentStatus @default(PENDING)
   createdAt         DateTime         @default(now()) @map("created_at")
-  
+
   // Delivery confirmation fields (US-ADMIN-008)
-  quantityDelivered Int?             @map("quantity_delivered")
-  qualityResult     QualityResult?    @map("quality_result")
-  confirmationNotes String?           @map("confirmation_notes")
-  confirmedBy       String?           @map("confirmed_by")
-  confirmedAt       DateTime?         @map("confirmed_at")
-  
-  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  farmer            Farmer           @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  deliveryAddress   DeliveryAddress  @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
-  payments          Payment[]
-  
+  quantityDelivered Int?           @map("quantity_delivered")
+  qualityResult     QualityResult? @map("quality_result")
+  confirmationNotes String?        @map("confirmation_notes")
+  confirmedBy       String?        @map("confirmed_by")
+  confirmedAt       DateTime?      @map("confirmed_at")
+
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  farmer          Farmer          @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  deliveryAddress DeliveryAddress @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
+  payments        Payment[]
+
   @@index([orderId])
   @@index([farmerId])
   @@index([deliveryDate])
@@ -311,21 +320,21 @@ model DeliveryAssignment {
 }
 
 model Payment {
-  id                String        @id @default(cuid())
-  farmerId          String        @map("farmer_id")
-  deliveryAssignmentId String?     @map("delivery_assignment_id")
-  amountOwed        Float         @map("amount_owed")
-  amountPaid        Float         @default(0) @map("amount_paid")
-  paymentStatus     PaymentStatus @default(NOT_PAID) @map("payment_status")
-  paymentMethod     PaymentMethod? @map("payment_method")
-  paymentDate       DateTime?     @map("payment_date")
-  recordedBy        String        @map("recorded_by")
-  notes             String?
-  createdAt         DateTime      @default(now()) @map("created_at")
-  
-  farmer            Farmer        @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  assignment        DeliveryAssignment? @relation(fields: [deliveryAssignmentId], references: [id], onDelete: SetNull)
-  
+  id                   String         @id @default(cuid())
+  farmerId             String         @map("farmer_id")
+  deliveryAssignmentId String?        @map("delivery_assignment_id")
+  amountOwed           Float          @map("amount_owed")
+  amountPaid           Float          @default(0) @map("amount_paid")
+  paymentStatus        PaymentStatus  @default(NOT_PAID) @map("payment_status")
+  paymentMethod        PaymentMethod? @map("payment_method")
+  paymentDate          DateTime?      @map("payment_date")
+  recordedBy           String         @map("recorded_by")
+  notes                String?
+  createdAt            DateTime       @default(now()) @map("created_at")
+
+  farmer     Farmer              @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  assignment DeliveryAssignment? @relation(fields: [deliveryAssignmentId], references: [id], onDelete: SetNull)
+
   @@index([farmerId])
   @@index([paymentStatus])
   @@index([paymentDate])
@@ -333,3 +342,55 @@ model Payment {
   @@map("payments")
 }
 
+// Performance Tracking Models
+
+model FarmerPerformance {
+  id        String          @id @default(cuid())
+  farmerId  String          @unique @map("farmer_id")
+  score     Int             @default(50) // 0-100, starts at 50 for Probationary
+  tier      PerformanceTier @default(PROBATIONARY)
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@index([farmerId])
+  @@index([tier])
+  @@index([score])
+  @@map("farmer_performance")
+}
+
+model FarmerPerformanceHistory {
+  id                   String           @id @default(cuid())
+  farmerId             String           @map("farmer_id")
+  previousScore        Int?             @map("previous_score")
+  newScore             Int              @map("new_score")
+  previousTier         PerformanceTier? @map("previous_tier")
+  newTier              PerformanceTier  @map("new_tier")
+  reason               String // e.g., "Delivery confirmed", "Late availability submission"
+  deliveryAssignmentId String?          @map("delivery_assignment_id") // Optional, if triggered by delivery
+  createdBy            String?          @map("created_by") // Admin ID if manual override, null if automatic
+  createdAt            DateTime         @default(now()) @map("created_at")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@index([farmerId])
+  @@index([createdAt])
+  @@index([deliveryAssignmentId])
+  @@map("farmer_performance_history")
+}
+
+model FarmerPerformanceBreakdown {
+  id                          String   @id @default(cuid())
+  farmerId                    String   @unique @map("farmer_id")
+  onTimeDeliveryScore         Float?   @map("on_time_delivery_score") // 0-100
+  quantityAccuracyScore       Float?   @map("quantity_accuracy_score") // 0-100
+  qualityScore                Float?   @map("quality_score") // 0-100
+  availabilitySubmissionScore Float?   @map("availability_submission_score") // 0-100
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@index([farmerId])
+  @@map("farmer_performance_breakdown")
+}

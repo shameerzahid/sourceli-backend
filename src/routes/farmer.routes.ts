@@ -6,6 +6,9 @@ import {
   getAvailabilityHistoryHandler,
   getDeliveryAssignmentsHandler,
   getAssignmentByIdHandler,
+  getPerformanceHandler,
+  getPerformanceHistoryHandler,
+  getPerformanceTrendHandler,
 } from '../controllers/farmer.controller.js';
 import {
   getFarmerPaymentsHandler,
@@ -44,6 +47,18 @@ router.get('/deliveries', getDeliveryAssignmentsHandler);
 
 // Get specific delivery assignment
 router.get('/deliveries/:id', getAssignmentByIdHandler);
+
+/**
+ * Farmer Performance Routes
+ */
+// Get performance data
+router.get('/performance', getPerformanceHandler);
+
+// Get performance history
+router.get('/performance/history', getPerformanceHistoryHandler);
+
+// Get performance trend
+router.get('/performance/trend', getPerformanceTrendHandler);
 
 export default router;
 

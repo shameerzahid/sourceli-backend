@@ -476,6 +476,23 @@ export async function confirmDelivery(
     });
   }
 
+  // Update farmer performance score after delivery confirmation
+  try {
+    const { updatePerformanceScore } = await import('./performance.service.js');
+    const reason = data.delivered 
+      ? `Delivery confirmed: ${data.qualityResult || 'Quality not assessed'}`
+      : 'Delivery failed';
+    await updatePerformanceScore(
+      updated.farmerId,
+      reason,
+      assignmentId,
+      adminId
+    );
+  } catch (error) {
+    // Log error but don't fail the delivery confirmation
+    console.error('Error updating performance score:', error);
+  }
+
   return updated;
 }
 

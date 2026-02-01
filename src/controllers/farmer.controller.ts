@@ -7,6 +7,14 @@ import {
   getDeliveryAssignments,
   getAssignmentById,
 } from '../services/farmer.service.js';
+import {
+  getPerformanceData,
+  getPerformanceHistory,
+  getRecentChanges,
+  getPerformanceTrend,
+  getTierThresholds,
+  getScoreWeights,
+} from '../services/performance.service.js';
 import { weeklyAvailabilitySchema } from '../validators/farmer.validator.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { getWeekStartDate, formatWeekRange, isWithinSubmissionWindow } from '../utils/weekCalculation.js';
@@ -224,6 +232,169 @@ export const getAssignmentByIdHandler = wrapAsync(
     res.status(200).json({
       success: true,
       data: assignment,
+    });
+  }
+);
+
+/**
+ * Get farmer performance data
+ * GET /api/farmers/performance
+ */
+export const getPerformanceHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const farmer = await prisma.farmer.findUnique({
+      where: { userId: req.user.userId },
+    });
+
+    if (!farmer) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Farmer profile not found',
+      });
+      return;
+    }
+
+    // Get performance data
+    const { performance, breakdown } = await getPerformanceData(farmer.id);
+    
+    // Get tier thresholds and score weights for display
+    const tierThresholds = getTierThresholds();
+    const scoreWeights = getScoreWeights();
+
+    // Get recent changes
+    const recentChanges = await getRecentChanges(farmer.id, 10);
+
+    // Calculate next tier progress
+    let nextTierProgress = null;
+    if (performance) {
+      const currentScore = performance.score;
+      let nextTierThreshold: number | undefined;
+      let nextTierName: string | undefined;
+
+      if (currentScore < tierThresholds.STANDARD) {
+        nextTierThreshold = tierThresholds.STANDARD;
+        nextTierName = 'STANDARD';
+      } else if (currentScore < tierThresholds.PREFERRED) {
+        nextTierThreshold = tierThresholds.PREFERRED;
+        nextTierName = 'PREFERRED';
+      } else {
+        // Already at highest tier
+        nextTierProgress = {
+          currentScore,
+          nextTierThreshold: 100,
+          pointsNeeded: 0,
+          nextTierName: 'MAX',
+        };
+      }
+
+      if (!nextTierProgress && nextTierThreshold !== undefined && nextTierName !== undefined) {
+        nextTierProgress = {
+          currentScore,
+          nextTierThreshold,
+          pointsNeeded: Math.max(0, nextTierThreshold - currentScore),
+          nextTierName,
+        };
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        performance: performance || null,
+        breakdown: breakdown || null,
+        tierThresholds,
+        scoreWeights,
+        recentChanges,
+        nextTierProgress,
+      },
+    });
+  }
+);
+
+/**
+ * Get farmer performance history
+ * GET /api/farmers/performance/history
+ */
+export const getPerformanceHistoryHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const farmer = await prisma.farmer.findUnique({
+      where: { userId: req.user.userId },
+    });
+
+    if (!farmer) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Farmer profile not found',
+      });
+      return;
+    }
+
+    // Get days from query params (default: 30)
+    const days = req.query.days
+      ? parseInt(req.query.days as string, 10)
+      : 30;
+
+    const history = await getPerformanceHistory(farmer.id, days);
+
+    res.status(200).json({
+      success: true,
+      data: history,
+    });
+  }
+);
+
+/**
+ * Get farmer performance trend data
+ * GET /api/farmers/performance/trend
+ */
+export const getPerformanceTrendHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const farmer = await prisma.farmer.findUnique({
+      where: { userId: req.user.userId },
+    });
+
+    if (!farmer) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Farmer profile not found',
+      });
+      return;
+    }
+
+    // Get days from query params (default: 30)
+    const days = req.query.days
+      ? parseInt(req.query.days as string, 10)
+      : 30;
+
+    const trend = await getPerformanceTrend(farmer.id, days);
+
+    res.status(200).json({
+      success: true,
+      data: trend,
     });
   }
 );

@@ -76,6 +76,22 @@ export async function submitWeeklyAvailability(
     },
   });
 
+  // Update performance score if submission was late
+  if (isLate) {
+    try {
+      const { updatePerformanceScore } = await import('./performance.service.js');
+      await updatePerformanceScore(
+        farmerId,
+        'Late availability submission',
+        undefined,
+        undefined
+      );
+    } catch (error) {
+      // Log error but don't fail the submission
+      console.error('Error updating performance score:', error);
+    }
+  }
+
   return availability;
 }
 
