@@ -1,5 +1,5 @@
 import { prisma } from '../config/database.js';
-import { UserStatus } from '@prisma/client';
+import { UserStatus, OrderStatus, AssignmentStatus, PaymentStatus } from '@prisma/client';
 
 export interface ApproveFarmerData {
   adminNotes?: string;
@@ -582,11 +582,16 @@ export async function updateBuyerStatus(
 }
 
 /**
- * Get admin dashboard statistics
+ * Get admin dashboard statistics with comprehensive data and charts
  */
 export async function getAdminStats() {
   try {
     console.log("Starting getAdminStats...");
+    
+    // Calculate date ranges for charts (last 30 days)
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
     // Get all stats in parallel for better performance
     const [
@@ -594,54 +599,121 @@ export async function getAdminStats() {
       pendingRegistrations,
       activeFarmers,
       activeBuyers,
+      totalFarmers,
+      totalBuyers,
+      // Order stats
+      pendingOrders,
+      approvedOrders,
+      deliveredOrders,
+      failedOrders,
+      totalOrders,
+      // Delivery stats
+      pendingDeliveries,
+      deliveredDeliveries,
+      failedDeliveries,
+      totalDeliveries,
+      // Payment stats
+      totalPayments,
+      totalPaid,
+      totalOwed,
+      outstandingBalance,
+      // Chart data - registrations over time
+      farmerRegistrationsData,
+      buyerRegistrationsData,
+      // Chart data - orders over time
+      ordersData,
+      // Chart data - deliveries over time
+      deliveriesData,
     ] = await Promise.all([
       // Count pending farmer applications
       prisma.farmerApplication.count({
-        where: {
-          status: UserStatus.APPLIED,
-        },
-      }).catch((err) => {
-        console.error("Error counting pending applications:", err);
-        return 0;
-      }),
+        where: { status: UserStatus.APPLIED },
+      }).catch(() => 0),
       // Count pending buyer registrations
       prisma.buyerRegistration.count({
-        where: {
-          status: UserStatus.PENDING,
-        },
-      }).catch((err) => {
-        console.error("Error counting pending registrations:", err);
-        return 0;
-      }),
+        where: { status: UserStatus.PENDING },
+      }).catch(() => 0),
       // Count active farmers
       prisma.farmer.count({
-        where: {
-          user: {
-            status: UserStatus.ACTIVE,
-          },
-        },
-      }).catch((err) => {
-        console.error("Error counting active farmers:", err);
-        return 0;
-      }),
+        where: { user: { status: UserStatus.ACTIVE } },
+      }).catch(() => 0),
       // Count active buyers
       prisma.buyer.count({
-        where: {
-          user: {
-            status: UserStatus.ACTIVE,
-          },
-        },
-      }).catch((err) => {
-        console.error("Error counting active buyers:", err);
-        return 0;
-      }),
+        where: { user: { status: UserStatus.ACTIVE } },
+      }).catch(() => 0),
+      // Total farmers (all statuses)
+      prisma.farmer.count().catch(() => 0),
+      // Total buyers (all statuses)
+      prisma.buyer.count().catch(() => 0),
+      // Order stats
+      prisma.order.count({ where: { status: OrderStatus.PENDING } }).catch(() => 0),
+      prisma.order.count({ where: { status: OrderStatus.APPROVED } }).catch(() => 0),
+      prisma.order.count({ where: { status: OrderStatus.DELIVERED } }).catch(() => 0),
+      prisma.order.count({ where: { status: OrderStatus.FAILED } }).catch(() => 0),
+      prisma.order.count().catch(() => 0),
+      // Delivery stats
+      prisma.deliveryAssignment.count({ where: { status: AssignmentStatus.PENDING } }).catch(() => 0),
+      prisma.deliveryAssignment.count({ where: { status: AssignmentStatus.DELIVERED } }).catch(() => 0),
+      prisma.deliveryAssignment.count({ where: { status: AssignmentStatus.FAILED } }).catch(() => 0),
+      prisma.deliveryAssignment.count().catch(() => 0),
+      // Payment stats
+      prisma.payment.count().catch(() => 0),
+      prisma.payment.aggregate({
+        _sum: { amountPaid: true },
+      }).then(r => r._sum.amountPaid || 0).catch(() => 0),
+      prisma.payment.aggregate({
+        _sum: { amountOwed: true },
+      }).then(r => r._sum.amountOwed || 0).catch(() => 0),
+      prisma.payment.aggregate({
+        _sum: { amountOwed: true, amountPaid: true },
+      }).then(r => (r._sum.amountOwed || 0) - (r._sum.amountPaid || 0)).catch(() => 0),
+      // Get farmer registrations over last 30 days (grouped by day)
+      getRegistrationsChartData('farmer', thirtyDaysAgo, now),
+      // Get buyer registrations over last 30 days (grouped by day)
+      getRegistrationsChartData('buyer', thirtyDaysAgo, now),
+      // Get orders over last 30 days (grouped by day)
+      getOrdersChartData(thirtyDaysAgo, now),
+      // Get deliveries over last 30 days (grouped by day)
+      getDeliveriesChartData(thirtyDaysAgo, now),
     ]);
 
     const stats = {
+      // User stats
       pendingFarmerApplications: pendingApplications,
       pendingBuyerRegistrations: pendingRegistrations,
       activeFarmers,
       activeBuyers,
+      totalFarmers,
+      totalBuyers,
+      // Order stats
+      orders: {
+        pending: pendingOrders,
+        approved: approvedOrders,
+        delivered: deliveredOrders,
+        failed: failedOrders,
+        total: totalOrders,
+      },
+      // Delivery stats
+      deliveries: {
+        pending: pendingDeliveries,
+        delivered: deliveredDeliveries,
+        failed: failedDeliveries,
+        total: totalDeliveries,
+      },
+      // Payment stats
+      payments: {
+        total: totalPayments,
+        totalPaid,
+        totalOwed,
+        outstandingBalance,
+      },
+      // Chart data
+      charts: {
+        farmerRegistrations: farmerRegistrationsData,
+        buyerRegistrations: buyerRegistrationsData,
+        orders: ordersData,
+        deliveries: deliveriesData,
+      },
     };
 
     console.log("Admin stats calculated:", stats);
@@ -649,6 +721,196 @@ export async function getAdminStats() {
   } catch (error) {
     console.error("Error in getAdminStats service:", error);
     throw error;
+  }
+}
+
+/**
+ * Get registrations chart data grouped by day
+ */
+async function getRegistrationsChartData(
+  type: 'farmer' | 'buyer',
+  startDate: Date,
+  endDate: Date
+): Promise<Array<{ date: string; count: number }>> {
+  try {
+    let data: Array<{ submittedAt: Date }>;
+    
+    if (type === 'farmer') {
+      data = await prisma.farmerApplication.findMany({
+        where: {
+          submittedAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        select: { submittedAt: true },
+      });
+    } else {
+      data = await prisma.buyerRegistration.findMany({
+        where: {
+          submittedAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        select: { submittedAt: true },
+      });
+    }
+
+    // Group by day
+    const grouped = new Map<string, number>();
+    data.forEach((item) => {
+      const dateKey = item.submittedAt.toISOString().split('T')[0];
+      grouped.set(dateKey, (grouped.get(dateKey) || 0) + 1);
+    });
+
+    // Fill in missing days with 0
+    const result: Array<{ date: string; count: number }> = [];
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dateKey = currentDate.toISOString().split('T')[0];
+      result.push({
+        date: dateKey,
+        count: grouped.get(dateKey) || 0,
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`Error getting ${type} registrations chart data:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get orders chart data grouped by day
+ */
+async function getOrdersChartData(
+  startDate: Date,
+  endDate: Date
+): Promise<Array<{ date: string; pending: number; approved: number; delivered: number; failed: number }>> {
+  try {
+    const orders = await prisma.order.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        createdAt: true,
+        status: true,
+      },
+    });
+
+    // Group by day and status
+    const grouped = new Map<string, { pending: number; approved: number; delivered: number; failed: number }>();
+    
+    orders.forEach((order) => {
+      const dateKey = order.createdAt.toISOString().split('T')[0];
+      const existing = grouped.get(dateKey) || { pending: 0, approved: 0, delivered: 0, failed: 0 };
+      
+      switch (order.status) {
+        case OrderStatus.PENDING:
+          existing.pending++;
+          break;
+        case OrderStatus.APPROVED:
+        case OrderStatus.ALLOCATION:
+          existing.approved++;
+          break;
+        case OrderStatus.DELIVERED:
+          existing.delivered++;
+          break;
+        case OrderStatus.FAILED:
+        case OrderStatus.REJECTED:
+          existing.failed++;
+          break;
+      }
+      
+      grouped.set(dateKey, existing);
+    });
+
+    // Fill in missing days
+    const result: Array<{ date: string; pending: number; approved: number; delivered: number; failed: number }> = [];
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dateKey = currentDate.toISOString().split('T')[0];
+      const data = grouped.get(dateKey) || { pending: 0, approved: 0, delivered: 0, failed: 0 };
+      result.push({
+        date: dateKey,
+        ...data,
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Error getting orders chart data:", error);
+    return [];
+  }
+}
+
+/**
+ * Get deliveries chart data grouped by day
+ */
+async function getDeliveriesChartData(
+  startDate: Date,
+  endDate: Date
+): Promise<Array<{ date: string; pending: number; delivered: number; failed: number }>> {
+  try {
+    const deliveries = await prisma.deliveryAssignment.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        createdAt: true,
+        status: true,
+      },
+    });
+
+    // Group by day and status
+    const grouped = new Map<string, { pending: number; delivered: number; failed: number }>();
+    
+    deliveries.forEach((delivery) => {
+      const dateKey = delivery.createdAt.toISOString().split('T')[0];
+      const existing = grouped.get(dateKey) || { pending: 0, delivered: 0, failed: 0 };
+      
+      switch (delivery.status) {
+        case AssignmentStatus.PENDING:
+          existing.pending++;
+          break;
+        case AssignmentStatus.DELIVERED:
+          existing.delivered++;
+          break;
+        case AssignmentStatus.FAILED:
+          existing.failed++;
+          break;
+      }
+      
+      grouped.set(dateKey, existing);
+    });
+
+    // Fill in missing days
+    const result: Array<{ date: string; pending: number; delivered: number; failed: number }> = [];
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dateKey = currentDate.toISOString().split('T')[0];
+      const data = grouped.get(dateKey) || { pending: 0, delivered: 0, failed: 0 };
+      result.push({
+        date: dateKey,
+        ...data,
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Error getting deliveries chart data:", error);
+    return [];
   }
 }
 
