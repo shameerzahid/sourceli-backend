@@ -58,6 +58,7 @@ export interface AuthResponse {
     phone: string;
     role: UserRole;
     status: UserStatus;
+    avatarUrl?: string | null;
   };
 }
 
@@ -309,6 +310,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
       phone: user.phone,
       role: user.role,
       status: user.status,
+      avatarUrl: user.avatarUrl ?? null,
     },
   };
 }

@@ -89,6 +89,7 @@ model User {
   passwordHash String     @map("password_hash")
   role         UserRole
   status       UserStatus @default(PENDING)
+  avatarUrl    String?    @map("avatar_url")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 

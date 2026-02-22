@@ -59,6 +59,8 @@ export const farmerRegistrationSchema = z
       .refine((val) => val === true, {
         message: 'You must agree to platform rules, performance-based access, and no price negotiation policy',
       }),
+    // When submitting as JSON (upload-on-add flow), photos are pre-uploaded URLs
+    photoUrls: z.array(z.string().url()).min(1).max(10).optional(),
   })
   .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
     message: 'Maximum capacity must be greater than or equal to minimum capacity',

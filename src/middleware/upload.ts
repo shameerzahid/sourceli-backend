@@ -32,6 +32,12 @@ export const upload = multer({
 // Middleware for farmer registration photos (multiple files)
 export const uploadFarmPhotos = upload.array('photos', 10);
 
+// Single photo upload (for upload-on-add flow)
+export const uploadSingleFarmPhoto = upload.single('photo');
+
+// Single avatar upload (profile picture)
+export const uploadSingleAvatar = upload.single('avatar');
+
 
 
 

@@ -10,9 +10,11 @@ import {
   resetPasswordHandler,
   verifyResetTokenHandler,
   changePasswordHandler,
+  uploadFarmPhotoHandler,
+  uploadAvatarHandler,
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.js';
-import { uploadFarmPhotos } from '../middleware/upload.js';
+import { uploadFarmPhotos, uploadSingleFarmPhoto, uploadSingleAvatar } from '../middleware/upload.js';
 
 const router = Router();
 
@@ -20,9 +22,20 @@ const router = Router();
  * Public routes (no authentication required)
  */
 
-// Registration routes
-// Farmer registration accepts multipart/form-data with photos
-router.post('/register/farmer', uploadFarmPhotos, registerFarmerHandler);
+// Single farm photo upload (for upload-on-add during registration). Returns { url }.
+router.post('/upload/farm-photo', uploadSingleFarmPhoto, uploadFarmPhotoHandler);
+
+// Farmer registration: multipart (with photos) or JSON (with pre-uploaded photoUrls)
+router.post(
+  '/register/farmer',
+  (req, res, next) => {
+    if (req.is('multipart/form-data')) {
+      return uploadFarmPhotos(req, res, next);
+    }
+    next();
+  },
+  registerFarmerHandler
+);
 router.post('/register/buyer', registerBuyerHandler);
 
 // Login route
@@ -39,6 +52,9 @@ router.get('/verify-reset-token/:token', verifyResetTokenHandler);
 
 // Get current user profile
 router.get('/me', authenticate, getMeHandler);
+
+// Upload profile picture (authenticated)
+router.put('/upload/avatar', authenticate, uploadSingleAvatar, uploadAvatarHandler);
 
 // Refresh token
 router.post('/refresh', refreshTokenHandler);

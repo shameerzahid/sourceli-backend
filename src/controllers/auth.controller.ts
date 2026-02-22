@@ -31,38 +31,94 @@ import { uploadImageToCloudinary, validateImageFile } from '../utils/fileUpload.
 import { createError } from '../middleware/errorHandler.js';
 
 /**
+ * Upload a single farm photo (for upload-on-add during registration).
+ * POST /api/auth/upload/farm-photo
+ * Accepts multipart/form-data with single file field "photo". Returns { url }.
+ */
+export const uploadFarmPhotoHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const file = req.file;
+    if (!file) {
+      throw createError('No photo file provided. Send one image as multipart field "photo".', 400, 'PHOTO_REQUIRED');
+    }
+    validateImageFile(file);
+    const uploadResult = await uploadImageToCloudinary(
+      file.buffer,
+      'farm-photos',
+      `farmer-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    );
+    res.status(200).json({
+      success: true,
+      url: uploadResult.secureUrl,
+    });
+  }
+);
+
+/**
+ * Upload current user's profile picture (avatar).
+ * PUT /api/auth/upload/avatar
+ * Accepts multipart/form-data with single file field "avatar". Requires auth. Returns { url }.
+ */
+export const uploadAvatarHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user?.userId) {
+      throw createError('Authentication required', 401, 'UNAUTHORIZED');
+    }
+    const file = req.file;
+    if (!file) {
+      throw createError('No avatar file provided. Send one image as multipart field "avatar".', 400, 'AVATAR_REQUIRED');
+    }
+    validateImageFile(file);
+    const uploadResult = await uploadImageToCloudinary(
+      file.buffer,
+      'avatars',
+      `user-${req.user.userId}-${Date.now()}`
+    );
+    await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { avatarUrl: uploadResult.secureUrl },
+    });
+    res.status(200).json({
+      success: true,
+      url: uploadResult.secureUrl,
+    });
+  }
+);
+
+/**
  * Register a new farmer
  * POST /api/auth/register/farmer
- * Accepts multipart/form-data with photos
+ * Accepts either: (1) multipart/form-data with photos, or (2) application/json with photoUrls (pre-uploaded URLs).
  */
 export const registerFarmerHandler = wrapAsync(
   async (req: AuthRequest, res: Response): Promise<void> => {
-    // Parse form data - multer stores fields in req.body
-    // Convert string numbers to actual numbers and booleans
+    // Parse form data - multer stores fields in req.body (multipart) or use req.body (JSON)
     const formData: any = { ...req.body };
-    
-    // Convert numeric fields
+
+    // When sent as JSON, photoUrls is already an array; when multipart, we get files and need to coerce types
     if (formData.weeklyCapacityMin) {
       formData.weeklyCapacityMin = parseInt(formData.weeklyCapacityMin, 10);
     }
     if (formData.weeklyCapacityMax) {
       formData.weeklyCapacityMax = parseInt(formData.weeklyCapacityMax, 10);
     }
-    
-    // Convert boolean field (form data sends as string)
     if (formData.termsAccepted !== undefined) {
       formData.termsAccepted = formData.termsAccepted === 'true' || formData.termsAccepted === true;
     }
 
-    // Validate input (excluding photos which are handled separately)
+    // Validate input (photoUrls optional here; we resolve photos below)
     const validatedData = farmerRegistrationSchema.parse(formData);
 
-    // Handle photo uploads
     const files = req.files as Express.Multer.File[] | undefined;
-    const photoUrls: string[] = [];
+    let photoUrls: string[] = [];
 
-    if (files && files.length > 0) {
-      // Validate and upload each photo
+    // Pre-uploaded URLs (JSON body from frontend upload-on-add flow)
+    if (Array.isArray(validatedData.photoUrls) && validatedData.photoUrls.length > 0) {
+      photoUrls = validatedData.photoUrls;
+    }
+
+    // Otherwise upload from multipart files
+    if (photoUrls.length === 0 && files && files.length > 0) {
       for (const file of files) {
         validateImageFile(file);
         const uploadResult = await uploadImageToCloudinary(
@@ -74,7 +130,6 @@ export const registerFarmerHandler = wrapAsync(
       }
     }
 
-    // Minimum 1 photo required (per requirements)
     if (photoUrls.length === 0) {
       throw createError(
         'At least one farm photo is required. Please upload photos of your farm, housing, animals, or produce.',
@@ -202,6 +257,7 @@ export const getMeHandler = wrapAsync(
       phone: user.phone,
       role: user.role,
       status: user.status,
+      avatarUrl: user.avatarUrl ?? null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
