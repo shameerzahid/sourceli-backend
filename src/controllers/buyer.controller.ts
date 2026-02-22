@@ -12,13 +12,58 @@ import {
   getOrderById,
 } from '../services/order.service.js';
 import {
+  createStandingOrder,
+  getStandingOrdersByBuyer,
+  getStandingOrderById,
+  updateStandingOrder,
+} from '../services/standingOrder.service.js';
+import {
+  createSupportTicket,
+  listSupportTicketsByBuyer,
+  getSupportTicketByIdForBuyer,
+} from '../services/supportTicket.service.js';
+import {
   createDeliveryAddressSchema,
   updateDeliveryAddressSchema,
   createOrderSchema,
+  createStandingOrderSchema,
+  updateStandingOrderSchema,
 } from '../validators/buyer.validator.js';
+import { createSupportTicketSchema } from '../validators/supportTicket.validator.js';
+import { getBuyerDashboard } from '../services/dashboard.service.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { prisma } from '../config/database.js';
 import { createAuditLog } from '../utils/auditLog.js';
+
+/**
+ * Get buyer dashboard stats (active orders, standing orders, unread notifications)
+ * GET /api/buyers/dashboard
+ */
+export const getBuyerDashboardHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const dashboard = await getBuyerDashboard(req.user.userId);
+    if (!dashboard) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Buyer profile not found',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: dashboard,
+    });
+  }
+);
 
 /**
  * Get all delivery addresses
@@ -303,9 +348,205 @@ export const getOrderByIdHandler = wrapAsync(
   }
 );
 
+// --- Standing orders ---
 
+/**
+ * Create standing order
+ * POST /api/buyers/standing-orders
+ */
+export const createStandingOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
 
+    const validatedData = createStandingOrderSchema.parse(req.body);
+    const standingOrder = await createStandingOrder(req.user.userId, validatedData);
 
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'STANDING_ORDER_CREATED',
+      entityType: 'StandingOrder',
+      entityId: standingOrder.id,
+      details: {
+        productType: standingOrder.productType,
+        quantity: standingOrder.quantity,
+        preferredDeliveryDayOfWeek: standingOrder.preferredDeliveryDayOfWeek,
+      },
+      ipAddress: req.ip,
+    });
 
+    res.status(201).json({
+      success: true,
+      message: 'Standing order created successfully. Orders will be generated weekly.',
+      data: standingOrder,
+    });
+  }
+);
 
+/**
+ * Get all standing orders for buyer
+ * GET /api/buyers/standing-orders
+ */
+export const getStandingOrdersHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const list = await getStandingOrdersByBuyer(req.user.userId);
+    res.status(200).json({
+      success: true,
+      data: list,
+      count: list.length,
+    });
+  }
+);
+
+/**
+ * Get standing order by ID
+ * GET /api/buyers/standing-orders/:id
+ */
+export const getStandingOrderByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const standingOrder = await getStandingOrderById(id, req.user.userId);
+    res.status(200).json({
+      success: true,
+      data: standingOrder,
+    });
+  }
+);
+
+/**
+ * Update standing order (pause/cancel = isActive: false)
+ * PUT /api/buyers/standing-orders/:id
+ */
+export const updateStandingOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const validatedData = updateStandingOrderSchema.parse(req.body);
+    const standingOrder = await updateStandingOrder(id, req.user.userId, validatedData);
+
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'STANDING_ORDER_UPDATED',
+      entityType: 'StandingOrder',
+      entityId: standingOrder.id,
+      details: { isActive: standingOrder.isActive },
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: standingOrder.isActive
+        ? 'Standing order resumed.'
+        : 'Standing order paused.',
+      data: standingOrder,
+    });
+  }
+);
+
+// --- Support tickets (buyer only) ---
+
+/**
+ * Create support ticket
+ * POST /api/buyers/support-tickets
+ */
+export const createSupportTicketHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const validatedData = createSupportTicketSchema.parse(req.body);
+    const ticket = await createSupportTicket(req.user.userId, validatedData);
+
+    res.status(201).json({
+      success: true,
+      message: 'Support ticket created.',
+      data: ticket,
+    });
+  }
+);
+
+/**
+ * List own support tickets
+ * GET /api/buyers/support-tickets
+ */
+export const getSupportTicketsHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const status = req.query.status as string | undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const tickets = await listSupportTicketsByBuyer(req.user.userId, {
+      status: status as 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | undefined,
+      limit,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: tickets,
+    });
+  }
+);
+
+/**
+ * Get support ticket by ID (own only)
+ * GET /api/buyers/support-tickets/:id
+ */
+export const getSupportTicketByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const ticket = await getSupportTicketByIdForBuyer(id, req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      data: ticket,
+    });
+  }
+);
 

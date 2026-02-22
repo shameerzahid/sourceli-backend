@@ -89,9 +89,43 @@ export async function getAuditLogs(filters?: {
   return logs;
 }
 
+/**
+ * Get total count of audit logs matching filters (for pagination)
+ */
+export async function getAuditLogsCount(filters?: {
+  userId?: string;
+  actionType?: string;
+  entityType?: string;
+  entityId?: string;
+  startDate?: Date;
+  endDate?: Date;
+}) {
+  const where: any = {};
 
+  if (filters?.userId) {
+    where.userId = filters.userId;
+  }
+  if (filters?.actionType) {
+    where.actionType = filters.actionType;
+  }
+  if (filters?.entityType) {
+    where.entityType = filters.entityType;
+  }
+  if (filters?.entityId) {
+    where.entityId = filters.entityId;
+  }
+  if (filters?.startDate || filters?.endDate) {
+    where.timestamp = {};
+    if (filters.startDate) {
+      where.timestamp.gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      where.timestamp.lte = filters.endDate;
+    }
+  }
 
-
+  return prisma.auditLog.count({ where });
+}
 
 
 

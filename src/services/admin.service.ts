@@ -1,5 +1,6 @@
 import { prisma } from '../config/database.js';
-import { UserStatus, OrderStatus, AssignmentStatus, PaymentStatus } from '@prisma/client';
+import { UserStatus, OrderStatus, AssignmentStatus, PaymentStatus, TicketStatus } from '@prisma/client';
+import { notifyUser } from './notificationDelivery.service.js';
 
 export interface ApproveFarmerData {
   adminNotes?: string;
@@ -155,6 +156,14 @@ export async function approveFarmerApplication(
     return updatedApplication;
   });
 
+  await notifyUser(
+    application.farmer.userId,
+    'APPLICATION_REVIEWED',
+    'Application approved',
+    'Your farmer application has been approved. You can now access your dashboard and submit weekly availability.',
+    { applicationId }
+  ).catch((err) => console.error('[Notification]', err));
+
   return result;
 }
 
@@ -205,6 +214,14 @@ export async function rejectFarmerApplication(
 
     return updatedApplication;
   });
+
+  await notifyUser(
+    application.farmer.userId,
+    'APPLICATION_REJECTED',
+    'Application not approved',
+    data.rejectionReason || 'Your farmer application was not approved. Please contact support for more information.',
+    { applicationId, rejectionReason: data.rejectionReason }
+  ).catch((err) => console.error('[Notification]', err));
 
   return result;
 }
@@ -347,6 +364,14 @@ export async function approveBuyerRegistration(
     return updatedRegistration;
   });
 
+  await notifyUser(
+    registration.buyer.userId,
+    'REGISTRATION_APPROVED',
+    'Registration approved',
+    'Your buyer registration has been approved. You can now place orders.',
+    { registrationId }
+  ).catch((err) => console.error('[Notification]', err));
+
   return result;
 }
 
@@ -397,6 +422,14 @@ export async function rejectBuyerRegistration(
 
     return updatedRegistration;
   });
+
+  await notifyUser(
+    registration.buyer.userId,
+    'REGISTRATION_REJECTED',
+    'Registration not approved',
+    data.rejectionReason || 'Your buyer registration was not approved. Please contact support.',
+    { registrationId, rejectionReason: data.rejectionReason }
+  ).catch((err) => console.error('[Notification]', err));
 
   return result;
 }
@@ -624,6 +657,11 @@ export async function getAdminStats() {
       ordersData,
       // Chart data - deliveries over time
       deliveriesData,
+      // Support ticket counts (M3)
+      supportTicketsOpen,
+      supportTicketsInProgress,
+      supportTicketsResolved,
+      supportTicketsTotal,
     ] = await Promise.all([
       // Count pending farmer applications
       prisma.farmerApplication.count({
@@ -675,6 +713,11 @@ export async function getAdminStats() {
       getOrdersChartData(thirtyDaysAgo, now),
       // Get deliveries over last 30 days (grouped by day)
       getDeliveriesChartData(thirtyDaysAgo, now),
+      // Support ticket counts
+      prisma.supportTicket.count({ where: { status: TicketStatus.OPEN } }).catch(() => 0),
+      prisma.supportTicket.count({ where: { status: TicketStatus.IN_PROGRESS } }).catch(() => 0),
+      prisma.supportTicket.count({ where: { status: TicketStatus.RESOLVED } }).catch(() => 0),
+      prisma.supportTicket.count().catch(() => 0),
     ]);
 
     const stats = {
@@ -706,6 +749,13 @@ export async function getAdminStats() {
         totalPaid,
         totalOwed,
         outstandingBalance,
+      },
+      // Support ticket stats (M3)
+      supportTickets: {
+        open: supportTicketsOpen,
+        inProgress: supportTicketsInProgress,
+        resolved: supportTicketsResolved,
+        total: supportTicketsTotal,
       },
       // Chart data
       charts: {
@@ -912,5 +962,44 @@ async function getDeliveriesChartData(
     console.error("Error getting deliveries chart data:", error);
     return [];
   }
+}
+
+/**
+ * Get all produce categories with pricing bands (US-ADMIN-005)
+ */
+export async function getPricingBands() {
+  return prisma.produceCategory.findMany({
+    orderBy: { name: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      unitType: true,
+      minPrice: true,
+      maxPrice: true,
+      createdAt: true,
+    },
+  });
+}
+
+/**
+ * Update pricing band for a produce category
+ */
+export async function updatePricingBand(
+  categoryId: string,
+  data: { minPrice: number | null; maxPrice: number | null }
+) {
+  const category = await prisma.produceCategory.findUnique({
+    where: { id: categoryId },
+  });
+  if (!category) {
+    throw new Error('Produce category not found');
+  }
+  return prisma.produceCategory.update({
+    where: { id: categoryId },
+    data: {
+      minPrice: data.minPrice,
+      maxPrice: data.maxPrice,
+    },
+  });
 }
 

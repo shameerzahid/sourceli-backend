@@ -1,17 +1,40 @@
 import { prisma } from '../config/database.js';
 import { createError } from '../middleware/errorHandler.js';
 import { UserStatus } from '@prisma/client';
+import { getDeliveryCoverageRegions } from './system.service.js';
 
 export interface CreateDeliveryAddressData {
   address: string;
   landmark?: string;
+  region?: string;
   isDefault?: boolean;
 }
 
 export interface UpdateDeliveryAddressData {
   address?: string;
   landmark?: string;
+  region?: string;
   isDefault?: boolean;
+}
+
+function validateRegionInCoverage(region: string | undefined): void {
+  const allowed = getDeliveryCoverageRegions();
+  if (allowed.length === 0) return; // No restriction
+  const trimmed = region?.trim();
+  if (!trimmed) {
+    throw createError(
+      'Region is required. We currently deliver to: ' + allowed.join(', '),
+      400,
+      'REGION_REQUIRED'
+    );
+  }
+  if (!allowed.includes(trimmed)) {
+    throw createError(
+      `We don't deliver to "${trimmed}". Currently delivered regions: ${allowed.join(', ')}`,
+      400,
+      'REGION_NOT_IN_COVERAGE'
+    );
+  }
 }
 
 /**
@@ -38,6 +61,8 @@ export async function createDeliveryAddress(
   buyerId: string,
   data: CreateDeliveryAddressData
 ) {
+  validateRegionInCoverage(data.region);
+
   // If this is set as default, unset other defaults
   if (data.isDefault) {
     await prisma.deliveryAddress.updateMany({
@@ -66,6 +91,7 @@ export async function createDeliveryAddress(
       buyerId,
       address: data.address.trim(),
       landmark: data.landmark?.trim(),
+      region: data.region?.trim() || null,
       isDefault,
     },
   });
@@ -93,6 +119,10 @@ export async function updateDeliveryAddress(
     throw createError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   }
 
+  if (data.region !== undefined) {
+    validateRegionInCoverage(data.region);
+  }
+
   // If setting as default, unset other defaults
   if (data.isDefault === true) {
     await prisma.deliveryAddress.updateMany({
@@ -112,6 +142,7 @@ export async function updateDeliveryAddress(
     data: {
       address: data.address?.trim(),
       landmark: data.landmark?.trim(),
+      region: data.region !== undefined ? (data.region?.trim() || null) : undefined,
       isDefault: data.isDefault,
     },
   });

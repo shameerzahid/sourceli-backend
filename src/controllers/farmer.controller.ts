@@ -14,12 +14,44 @@ import {
   getPerformanceTrend,
   getTierThresholds,
   getScoreWeights,
+  getPerformanceWarnings,
 } from '../services/performance.service.js';
 import { weeklyAvailabilitySchema } from '../validators/farmer.validator.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { getWeekStartDate, formatWeekRange, isWithinSubmissionWindow } from '../utils/weekCalculation.js';
 import { createAuditLog } from '../utils/auditLog.js';
 import { prisma } from '../config/database.js';
+import { getFarmerDashboard } from '../services/dashboard.service.js';
+
+/**
+ * Get farmer dashboard stats (upcoming deliveries, score/tier, unread notifications)
+ * GET /api/farmers/dashboard
+ */
+export const getFarmerDashboardHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const dashboard = await getFarmerDashboard(req.user.userId);
+    if (!dashboard) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Farmer profile not found',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: dashboard,
+    });
+  }
+);
 
 /**
  * Submit weekly availability
@@ -265,12 +297,15 @@ export const getPerformanceHandler = wrapAsync(
     // Get performance data
     const { performance, breakdown } = await getPerformanceData(farmer.id);
     
-    // Get tier thresholds and score weights for display
-    const tierThresholds = getTierThresholds();
-    const scoreWeights = getScoreWeights();
+    // Get tier thresholds and score weights for display (from active rules)
+    const tierThresholds = await getTierThresholds();
+    const scoreWeights = await getScoreWeights();
 
-    // Get recent changes
-    const recentChanges = await getRecentChanges(farmer.id, 10);
+    // Get recent changes and warnings
+    const [recentChanges, warnings] = await Promise.all([
+      getRecentChanges(farmer.id, 10),
+      getPerformanceWarnings(farmer.id),
+    ]);
 
     // Calculate next tier progress
     let nextTierProgress = null;
@@ -314,6 +349,7 @@ export const getPerformanceHandler = wrapAsync(
         scoreWeights,
         recentChanges,
         nextTierProgress,
+        warnings,
       },
     });
   }

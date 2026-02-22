@@ -15,6 +15,11 @@ export const createDeliveryAddressSchema = z.object({
     .max(200, 'Landmark is too long')
     .trim()
     .optional(),
+  region: z
+    .string()
+    .max(100, 'Region is too long')
+    .trim()
+    .optional(),
   isDefault: z
     .boolean()
     .optional(),
@@ -33,6 +38,11 @@ export const updateDeliveryAddressSchema = z.object({
   landmark: z
     .string()
     .max(200, 'Landmark is too long')
+    .trim()
+    .optional(),
+  region: z
+    .string()
+    .max(100, 'Region is too long')
     .trim()
     .optional(),
   isDefault: z
@@ -74,9 +84,60 @@ export const createOrderSchema = z.object({
     .optional(),
 });
 
+/**
+ * Create standing order schema
+ * preferredDeliveryDayOfWeek: 0 = Sunday, 1 = Monday, ... 6 = Saturday
+ */
+export const createStandingOrderSchema = z.object({
+  productType: z
+    .string()
+    .min(1, 'Product type is required')
+    .trim(),
+  quantity: z
+    .number()
+    .int('Quantity must be a whole number')
+    .positive('Quantity must be greater than 0'),
+  preferredDeliveryDayOfWeek: z
+    .number()
+    .int()
+    .min(0, 'Day must be 0 (Sunday) to 6 (Saturday)')
+    .max(6, 'Day must be 0 (Sunday) to 6 (Saturday)'),
+  deliveryAddressId: z
+    .string()
+    .min(1, 'Delivery address is required'),
+  startDate: z
+    .string()
+    .datetime('Start date must be a valid date')
+    .or(z.date())
+    .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+    .refine((date) => date > new Date(), {
+      message: 'Start date must be in the future',
+    }),
+  endDate: z
+    .union([z.string().datetime(), z.date(), z.null()])
+    .optional()
+    .transform((val) =>
+      val == null ? undefined : typeof val === 'string' ? new Date(val) : val
+    ),
+  notes: z
+    .string()
+    .max(500, 'Notes are too long')
+    .trim()
+    .optional(),
+});
+
+/**
+ * Update standing order (pause/cancel = isActive: false, resume = isActive: true)
+ */
+export const updateStandingOrderSchema = z.object({
+  isActive: z.boolean().optional(),
+});
+
 export type CreateDeliveryAddressInput = z.infer<typeof createDeliveryAddressSchema>;
 export type UpdateDeliveryAddressInput = z.infer<typeof updateDeliveryAddressSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type CreateStandingOrderInput = z.infer<typeof createStandingOrderSchema>;
+export type UpdateStandingOrderInput = z.infer<typeof updateStandingOrderSchema>;
 
 
 

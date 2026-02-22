@@ -1,6 +1,7 @@
 import { prisma } from '../config/database.js';
 import { createError } from '../middleware/errorHandler.js';
 import { OrderType, OrderStatus, UserStatus } from '@prisma/client';
+import { notifyUser } from './notificationDelivery.service.js';
 
 export interface CreateOrderData {
   productType: string;
@@ -207,7 +208,9 @@ export async function getOrderById(orderId: string, buyerId: string) {
 export async function getPendingOrders() {
   const orders = await prisma.order.findMany({
     where: {
-      status: OrderStatus.PENDING,
+      status: {
+        in: [OrderStatus.PENDING, OrderStatus.PENDING_MODIFICATION],
+      },
     },
     include: {
       buyer: {
@@ -278,6 +281,7 @@ export async function approveOrder(
         include: {
           user: {
             select: {
+              id: true,
               email: true,
               phone: true,
             },
@@ -287,6 +291,15 @@ export async function approveOrder(
       deliveryAddress: true,
     },
   });
+
+  const buyerUserId = updated.buyer.userId;
+  await notifyUser(
+    buyerUserId,
+    'ORDER_APPROVED',
+    'Order approved',
+    `Your order (${updated.productType}, ${updated.quantity} units) has been approved and is being allocated for delivery on ${new Date(updated.deliveryDate).toLocaleDateString()}.`,
+    { orderId: updated.id }
+  ).catch((err) => console.error('[Notification]', err));
 
   return updated;
 }
@@ -301,6 +314,7 @@ export async function rejectOrder(
 ) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
+    include: { buyer: true },
   });
 
   if (!order) {
@@ -337,12 +351,86 @@ export async function rejectOrder(
     },
   });
 
+  await notifyUser(
+    order.buyer.userId,
+    'ORDER_REJECTED',
+    'Order not approved',
+    `Your order was not approved. Reason: ${rejectionReason.trim()}`,
+    { orderId: updated.id }
+  ).catch((err) => console.error('[Notification]', err));
+
   return updated;
 }
 
+/**
+ * Request order modification (admin only). Sets order to PENDING_MODIFICATION and notifies buyer (US-ADMIN-010).
+ */
+export async function requestOrderModification(
+  orderId: string,
+  adminId: string,
+  messageToBuyer: string
+) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      buyer: {
+        include: {
+          user: {
+            select: { id: true, email: true, phone: true },
+          },
+        },
+      },
+      deliveryAddress: true,
+    },
+  });
 
+  if (!order) {
+    throw createError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
 
+  if (order.status !== OrderStatus.PENDING) {
+    throw createError(
+      `Cannot request modification for order with status: ${order.status}. Only PENDING orders can be sent back for modification.`,
+      400,
+      'INVALID_ORDER_STATUS'
+    );
+  }
 
+  const trimmedMessage = messageToBuyer.trim();
+  if (trimmedMessage.length === 0) {
+    throw createError('Message to buyer is required', 400, 'MESSAGE_REQUIRED');
+  }
+  if (trimmedMessage.length > 500) {
+    throw createError('Message to buyer must be at most 500 characters', 400, 'MESSAGE_TOO_LONG');
+  }
 
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: OrderStatus.PENDING_MODIFICATION,
+      modificationRequestedAt: new Date(),
+      modificationMessage: trimmedMessage,
+    },
+    include: {
+      buyer: {
+        include: {
+          user: {
+            select: { id: true, email: true, phone: true },
+          },
+        },
+      },
+      deliveryAddress: true,
+    },
+  });
 
+  await notifyUser(
+    order.buyer.userId,
+    'ORDER_MODIFICATION_REQUESTED',
+    'Admin requested order changes',
+    `The admin has requested changes to your order. Message: ${trimmedMessage}`,
+    { orderId: updated.id }
+  ).catch((err) => console.error('[Notification]', err));
+
+  return updated;
+}
 

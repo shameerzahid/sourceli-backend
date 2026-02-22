@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { requireFarmer } from '../middleware/rbac.js';
 import {
+  getFarmerDashboardHandler,
   submitAvailabilityHandler,
   getAvailabilityHistoryHandler,
   getDeliveryAssignmentsHandler,
@@ -14,12 +15,18 @@ import {
   getFarmerPaymentsHandler,
   getOutstandingBalanceHandler,
 } from '../controllers/payment.controller.js';
+import { getNotificationsHandler } from '../controllers/notification.controller.js';
 
 const router = Router();
 
 // All farmer routes require authentication and farmer role
 router.use(authenticate);
 router.use(requireFarmer());
+
+/**
+ * Farmer Dashboard
+ */
+router.get('/dashboard', getFarmerDashboardHandler);
 
 /**
  * Farmer Availability Routes
@@ -60,6 +67,11 @@ router.get('/performance/trend', getPerformanceTrendHandler);
 
 // Get performance data (less specific - comes last)
 router.get('/performance', getPerformanceHandler);
+
+/**
+ * Notifications
+ */
+router.get('/notifications', getNotificationsHandler);
 
 export default router;
 

@@ -110,6 +110,7 @@ export const buyerRegistrationSchema = z.object({
       z.object({
         address: z.string().min(1, 'Address is required').max(500, 'Address is too long'),
         landmark: z.string().max(200, 'Landmark is too long').optional(),
+        region: z.string().max(100).optional(),
         isDefault: z.boolean().optional(),
       })
     )

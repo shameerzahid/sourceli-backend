@@ -18,6 +18,7 @@ import {
   getPendingOrdersHandler,
   approveOrderHandler,
   rejectOrderHandler,
+  requestOrderModificationHandler,
 } from '../controllers/admin.controller.js';
 import {
   getAllocationDataHandler,
@@ -31,6 +32,17 @@ import {
   recordPaymentHandler,
   getPaymentReportsHandler,
 } from '../controllers/payment.controller.js';
+import {
+  getPerformanceRulesHandler,
+  updatePerformanceRulesHandler,
+  overridePerformanceHandler,
+  getPricingBandsHandler,
+  updatePricingBandHandler,
+  getAuditLogsHandler,
+  getSupportTicketsHandler,
+  getSupportTicketByIdHandler,
+  respondToSupportTicketHandler,
+} from '../controllers/admin.controller.js';
 
 const router = Router();
 
@@ -71,6 +83,7 @@ router.put('/buyers/:id/status', updateBuyerStatusHandler);
 router.get('/orders/pending', getPendingOrdersHandler);
 router.post('/orders/:id/approve', approveOrderHandler);
 router.post('/orders/:id/reject', rejectOrderHandler);
+router.post('/orders/:id/request-modification', requestOrderModificationHandler);
 
 // Allocation Management
 router.get('/allocations', getAllocationDataHandler);
@@ -85,6 +98,23 @@ router.post('/deliveries/:id/confirm', confirmDeliveryHandler);
 // Payment Management
 router.post('/payments', recordPaymentHandler);
 router.get('/payments', getPaymentReportsHandler);
+
+// Performance rules (US-ADMIN-006) and override (US-ADMIN-009)
+router.get('/performance-rules', getPerformanceRulesHandler);
+router.put('/performance-rules', updatePerformanceRulesHandler);
+router.post('/performance/override', overridePerformanceHandler);
+
+// Pricing bands (US-ADMIN-005)
+router.get('/pricing-bands', getPricingBandsHandler);
+router.put('/pricing-bands', updatePricingBandHandler);
+
+// Audit logs (reportable, US-SYS-003)
+router.get('/audit-logs', getAuditLogsHandler);
+
+// Support tickets
+router.get('/support-tickets', getSupportTicketsHandler);
+router.get('/support-tickets/:id', getSupportTicketByIdHandler);
+router.post('/support-tickets/:id/respond', respondToSupportTicketHandler);
 
 export default router;
 

@@ -1,6 +1,7 @@
 import { prisma } from '../config/database.js';
 import { getWeekStartDate, isWithinSubmissionWindow, isLateSubmission } from '../utils/weekCalculation.js';
 import { createError } from '../middleware/errorHandler.js';
+import { notifyUser } from './notificationDelivery.service.js';
 
 export interface SubmitAvailabilityData {
   productType: string;
@@ -76,7 +77,6 @@ export async function submitWeeklyAvailability(
     },
   });
 
-  // Update performance score if submission was late
   if (isLate) {
     try {
       const { updatePerformanceScore } = await import('./performance.service.js');
@@ -87,8 +87,20 @@ export async function submitWeeklyAvailability(
         undefined
       );
     } catch (error) {
-      // Log error but don't fail the submission
       console.error('Error updating performance score:', error);
+    }
+    const farmer = await prisma.farmer.findUnique({
+      where: { id: farmerId },
+      select: { userId: true },
+    });
+    if (farmer?.userId) {
+      await notifyUser(
+        farmer.userId,
+        'LATE_AVAILABILITY_WARNING',
+        'Late availability submission',
+        'Your availability was submitted after the Monday–Tuesday window. Late submissions may affect your performance score.',
+        { availabilityId: availability.id, weekStartDate: weekStartDate.toISOString() }
+      ).catch((err) => console.error('[Notification]', err));
     }
   }
 

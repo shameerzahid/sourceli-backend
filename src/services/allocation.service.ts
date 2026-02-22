@@ -1,6 +1,7 @@
 import { prisma } from '../config/database.js';
 import { createError } from '../middleware/errorHandler.js';
 import { OrderStatus, AssignmentStatus, UserStatus, QualityResult } from '@prisma/client';
+import { notifyUser } from './notificationDelivery.service.js';
 import { getWeekStartDate } from '../utils/weekCalculation.js';
 
 export interface AllocationAssignment {
@@ -238,6 +239,19 @@ export async function createDeliveryAssignments(
     )
   );
 
+  const farmerIdToUserId = new Map(farmers.map((f) => [f.id, f.userId]));
+  for (const a of assignments) {
+    const farmerUserId = farmerIdToUserId.get(a.farmerId);
+    if (!farmerUserId) continue;
+    await notifyUser(
+      farmerUserId,
+      'NEW_ASSIGNMENT',
+      'New delivery assignment',
+      `You have a new delivery: ${a.assignedQuantity} units of ${order.productType} for ${new Date(order.deliveryDate).toLocaleDateString()}.`,
+      { deliveryAssignmentId: a.id, orderId: order.id }
+    ).catch((err) => console.error('[Notification]', err));
+  }
+
   return {
     order,
     assignments,
@@ -368,6 +382,7 @@ export interface ConfirmDeliveryData {
   quantityDelivered?: number;
   qualityResult?: 'PASS' | 'PARTIAL' | 'FAIL';
   notes?: string;
+  estimatedTimeWindow?: string | null; // e.g. "9:00-12:00" (US-BUYER-004)
 }
 
 export async function confirmDelivery(
@@ -430,6 +445,7 @@ export async function confirmDelivery(
       confirmationNotes: data.notes ?? null,
       confirmedBy: adminId,
       confirmedAt: new Date(),
+      estimatedTimeWindow: data.estimatedTimeWindow !== undefined ? (data.estimatedTimeWindow?.trim() || null) : undefined,
     },
     include: {
       order: {
@@ -476,21 +492,59 @@ export async function confirmDelivery(
     });
   }
 
-  // Update farmer performance score after delivery confirmation
+  const farmerUserId = updated.farmer.userId;
+
+  if (!data.delivered) {
+    await notifyUser(
+      farmerUserId,
+      'MISSED_DELIVERY_WARNING',
+      'Delivery marked as failed',
+      'A delivery assignment was marked as failed. This may affect your performance score.',
+      { deliveryAssignmentId: assignmentId }
+    ).catch((err) => console.error('[Notification]', err));
+  }
+
+  let tierChanged = false;
   try {
     const { updatePerformanceScore } = await import('./performance.service.js');
     const reason = data.delivered 
       ? `Delivery confirmed: ${data.qualityResult || 'Quality not assessed'}`
       : 'Delivery failed';
-    await updatePerformanceScore(
+    const { previousTier, newTier } = await updatePerformanceScore(
       updated.farmerId,
       reason,
       assignmentId,
       adminId
     );
+    tierChanged = previousTier !== newTier;
   } catch (error) {
-    // Log error but don't fail the delivery confirmation
     console.error('Error updating performance score:', error);
+  }
+
+  if (tierChanged) {
+    await notifyUser(
+      farmerUserId,
+      'TIER_CHANGED',
+      'Performance tier updated',
+      'Your performance tier has been updated based on recent delivery outcomes. Check your dashboard for details.',
+      { farmerId: updated.farmerId }
+    ).catch((err) => console.error('[Notification]', err));
+  }
+
+  if (allDelivered && allAssignments.length > 0) {
+    const orderWithBuyer = await prisma.order.findUnique({
+      where: { id: updated.orderId },
+      include: { buyer: true },
+    });
+    if (orderWithBuyer?.buyer?.userId) {
+      await notifyUser(
+        orderWithBuyer.buyer.userId,
+        'ORDER_STATUS_CHANGE',
+        'Order delivered',
+        `Your order has been delivered. Thank you for your business!`,
+        { orderId: updated.orderId }
+      ).catch((err) => console.error('[Notification]', err));
+    }
   }
 
   return updated;

@@ -14,11 +14,14 @@ import {
   updateFarmerStatus,
   updateBuyerStatus,
   getAdminStats,
+  getPricingBands,
+  updatePricingBand,
 } from '../services/admin.service.js';
 import {
   getPendingOrders,
   approveOrder,
   rejectOrder,
+  requestOrderModification,
 } from '../services/order.service.js';
 import {
   approveFarmerSchema,
@@ -29,8 +32,25 @@ import {
   updateBuyerStatusSchema,
   listFarmersQuerySchema,
   listBuyersQuerySchema,
+  updatePerformanceRulesSchema,
+  overridePerformanceSchema,
+  updatePricingBandSchema,
+  requestOrderModificationSchema,
 } from '../validators/admin.validator.js';
-import { createAuditLog } from '../utils/auditLog.js';
+import {
+  getPerformanceRulesRecord,
+  getActivePerformanceRules,
+  updatePerformanceRules,
+  type PerformanceRulesData,
+} from '../services/performanceRules.service.js';
+import { overridePerformanceScore } from '../services/performance.service.js';
+import {
+  listAllSupportTickets,
+  getSupportTicketByIdForAdmin,
+  respondToSupportTicket,
+} from '../services/supportTicket.service.js';
+import { respondToSupportTicketSchema } from '../validators/supportTicket.validator.js';
+import { createAuditLog, getAuditLogs, getAuditLogsCount } from '../utils/auditLog.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 
 /**
@@ -477,3 +497,316 @@ export const rejectOrderHandler = wrapAsync(
   }
 );
 
+/**
+ * Request order modification (US-ADMIN-010). Sets order to PENDING_MODIFICATION and notifies buyer.
+ */
+export const requestOrderModificationHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.userId;
+
+    const validatedData = requestOrderModificationSchema.parse(req.body);
+
+    const order = await requestOrderModification(
+      id,
+      adminId,
+      validatedData.messageToBuyer
+    );
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'ORDER_MODIFICATION_REQUESTED',
+      entityType: 'Order',
+      entityId: id,
+      details: {
+        orderId: id,
+        buyerId: order.buyerId,
+        messageToBuyer: validatedData.messageToBuyer,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Modification requested; buyer has been notified.',
+      data: order,
+    });
+  }
+);
+
+// --- Performance rules (US-ADMIN-006) ---
+
+/**
+ * Get current performance rules (admin)
+ * GET /api/admin/performance-rules
+ */
+export const getPerformanceRulesHandler = wrapAsync(
+  async (_req: AuthRequest, res: Response) => {
+    const record = await getPerformanceRulesRecord();
+    const active = await getActivePerformanceRules();
+    res.json({
+      success: true,
+      data: record
+        ? {
+            id: record.id,
+            tierThresholds: record.tierThresholds,
+            scoreWeights: record.scoreWeights,
+            penalties: record.penalties,
+            warningTriggers: record.warningTriggers,
+            effectiveFrom: record.effectiveFrom,
+            updatedBy: record.updatedBy,
+            updatedAt: record.updatedAt,
+          }
+        : null,
+      activeRules: active,
+    });
+  }
+);
+
+/**
+ * Update performance rules (admin). Creates new rule row (history preserved).
+ * PUT /api/admin/performance-rules
+ */
+export const updatePerformanceRulesHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = updatePerformanceRulesSchema.parse(req.body);
+    const rule = await updatePerformanceRules(adminId, validatedData as PerformanceRulesData);
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'PERFORMANCE_RULES_UPDATED',
+      entityType: 'PerformanceRule',
+      entityId: rule.id,
+      details: {},
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Performance rules updated. Changes apply to future calculations.',
+      data: {
+        id: rule.id,
+        tierThresholds: rule.tierThresholds,
+        scoreWeights: rule.scoreWeights,
+        penalties: rule.penalties,
+        warningTriggers: rule.warningTriggers,
+        effectiveFrom: rule.effectiveFrom,
+      },
+    });
+  }
+);
+
+/**
+ * Admin override farmer performance score/tier (US-ADMIN-009)
+ * POST /api/admin/performance/override
+ */
+export const overridePerformanceHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = overridePerformanceSchema.parse(req.body);
+    const { farmerId } = validatedData;
+
+    await overridePerformanceScore(farmerId, adminId, {
+      score: validatedData.score,
+      tier: validatedData.tier,
+      reason: validatedData.reason,
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'PERFORMANCE_OVERRIDE',
+      entityType: 'FarmerPerformance',
+      entityId: farmerId,
+      details: {
+        score: validatedData.score,
+        tier: validatedData.tier,
+        reason: validatedData.reason,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Performance override applied.',
+    });
+  }
+);
+
+// --- Pricing bands (US-ADMIN-005) ---
+
+/**
+ * Get all pricing bands (produce categories with min/max price)
+ * GET /api/admin/pricing-bands
+ */
+export const getPricingBandsHandler = wrapAsync(
+  async (_req: AuthRequest, res: Response) => {
+    const bands = await getPricingBands();
+    res.json({
+      success: true,
+      data: bands,
+      count: bands.length,
+    });
+  }
+);
+
+/**
+ * Update pricing band for a category
+ * PUT /api/admin/pricing-bands
+ */
+export const updatePricingBandHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = updatePricingBandSchema.parse(req.body);
+
+    const category = await updatePricingBand(validatedData.categoryId, {
+      minPrice: validatedData.minPrice,
+      maxPrice: validatedData.maxPrice,
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'PRICING_BAND_UPDATED',
+      entityType: 'ProduceCategory',
+      entityId: category.id,
+      details: {
+        categoryName: category.name,
+        minPrice: category.minPrice,
+        maxPrice: category.maxPrice,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Pricing band updated',
+      data: category,
+    });
+  }
+);
+
+// --- Audit logs (reportable) ---
+
+/**
+ * Get audit logs with filters. Query: startDate, endDate, userId, actionType, entityType, limit, offset
+ * GET /api/admin/audit-logs
+ * Optional: ?format=csv returns CSV for export
+ */
+export const getAuditLogsHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const startDate = req.query.startDate as string | undefined;
+    const endDate = req.query.endDate as string | undefined;
+    const userId = req.query.userId as string | undefined;
+    const actionType = req.query.actionType as string | undefined;
+    const entityType = req.query.entityType as string | undefined;
+    const limit = req.query.limit ? Math.min(500, Math.max(1, Number(req.query.limit))) : 100;
+    const offset = req.query.offset ? Math.max(0, Number(req.query.offset)) : 0;
+    const format = (req.query.format as string)?.toLowerCase();
+
+    const filters = {
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      userId: userId || undefined,
+      actionType: actionType || undefined,
+      entityType: entityType || undefined,
+      limit: format === 'csv' ? 5000 : limit,
+      offset: format === 'csv' ? 0 : offset,
+    };
+
+    const [logs, total] = await Promise.all([
+      getAuditLogs(filters),
+      getAuditLogsCount(filters),
+    ]);
+
+    if (format === 'csv') {
+      const header = 'Timestamp,User Email,Role,Action Type,Entity Type,Entity ID,Details\n';
+      const rows = logs.map((log: any) => {
+        const email = log.user?.email ?? '';
+        const role = log.user?.role ?? '';
+        const details = typeof log.details === 'object' ? JSON.stringify(log.details).replace(/"/g, '""') : String(log.details ?? '');
+        return `${log.timestamp},${email},${role},${log.actionType},${log.entityType},${log.entityId ?? ''},"${details}"`;
+      });
+      const csv = header + rows.join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="audit-logs-${new Date().toISOString().slice(0, 10)}.csv"`);
+      res.send(csv);
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: logs,
+      total,
+      limit: filters.limit,
+      offset: filters.offset,
+    });
+  }
+);
+
+// --- Support tickets ---
+
+/**
+ * List all support tickets (admin). Optional ?status=OPEN|IN_PROGRESS|RESOLVED
+ * GET /api/admin/support-tickets
+ */
+export const getSupportTicketsHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const status = req.query.status as string | undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const tickets = await listAllSupportTickets({
+      status: status as 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | undefined,
+      limit,
+    });
+
+    res.json({
+      success: true,
+      data: tickets,
+      count: tickets.length,
+    });
+  }
+);
+
+/**
+ * Get support ticket by ID (admin)
+ * GET /api/admin/support-tickets/:id
+ */
+export const getSupportTicketByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const ticket = await getSupportTicketByIdForAdmin(id);
+
+    res.json({
+      success: true,
+      data: ticket,
+    });
+  }
+);
+
+/**
+ * Admin respond to support ticket
+ * POST /api/admin/support-tickets/:id/respond
+ */
+export const respondToSupportTicketHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const { id } = req.params;
+    const validatedData = respondToSupportTicketSchema.parse(req.body);
+
+    const ticket = await respondToSupportTicket(id, adminId, validatedData);
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'SUPPORT_TICKET_RESPONDED',
+      entityType: 'SupportTicket',
+      entityId: ticket.id,
+      details: { status: ticket.status },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Response saved.',
+      data: ticket,
+    });
+  }
+);

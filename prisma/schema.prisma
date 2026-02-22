@@ -36,6 +36,7 @@ enum OrderType {
 
 enum OrderStatus {
   PENDING
+  PENDING_MODIFICATION  // Admin requested changes; buyer should amend or resubmit (US-ADMIN-010)
   APPROVED
   ALLOCATION
   DELIVERED
@@ -74,6 +75,13 @@ enum PerformanceTier {
   PREFERRED
 }
 
+// Milestone 3: Support ticket status
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
 model User {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -84,9 +92,11 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  farmer    Farmer?
-  buyer     Buyer?
-  auditLogs AuditLog[]
+  farmer         Farmer?
+  buyer          Buyer?
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  supportTickets SupportTicket[]
 
   @@index([email])
   @@index([phone])
@@ -141,6 +151,7 @@ model Buyer {
   registration      BuyerRegistration?
   deliveryAddresses DeliveryAddress[]
   orders            Order[]
+  standingOrders    StandingOrder[]
 
   @@index([userId])
   @@index([buyerType])
@@ -152,12 +163,14 @@ model DeliveryAddress {
   buyerId   String   @map("buyer_id")
   address   String
   landmark  String?
+  region    String?  // Geographic coverage area (US-BUYER-005); validated against allowed list
   isDefault Boolean  @default(false) @map("is_default")
   createdAt DateTime @default(now()) @map("created_at")
 
-  buyer       Buyer                @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  orders      Order[]
-  assignments DeliveryAssignment[]
+  buyer           Buyer            @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  orders          Order[]
+  assignments     DeliveryAssignment[]
+  standingOrders  StandingOrder[]
 
   @@index([buyerId])
   @@index([buyerId, isDefault])
@@ -236,6 +249,8 @@ model ProduceCategory {
   id        String   @id @default(cuid())
   name      String   @unique
   unitType  String   @map("unit_type") // e.g., "kg", "units"
+  minPrice  Float?   @map("min_price") // Admin-set minimum price per unit (US-ADMIN-005)
+  maxPrice  Float?   @map("max_price") // Admin-set maximum price per unit
   createdAt DateTime @default(now()) @map("created_at")
 
   // Note: Orders and WeeklyAvailability reference productType as String (category name)
@@ -265,29 +280,59 @@ model WeeklyAvailability {
 }
 
 model Order {
-  id                String      @id @default(cuid())
-  buyerId           String      @map("buyer_id")
-  productType       String      @map("product_type")
+  id                String       @id @default(cuid())
+  buyerId           String       @map("buyer_id")
+  productType       String       @map("product_type")
   quantity          Int
-  orderType         OrderType   @map("order_type")
-  deliveryDate      DateTime    @map("delivery_date")
-  deliveryAddressId String      @map("delivery_address_id")
-  status            OrderStatus @default(PENDING)
+  orderType         OrderType    @map("order_type")
+  deliveryDate      DateTime     @map("delivery_date")
+  deliveryAddressId String       @map("delivery_address_id")
+  status            OrderStatus  @default(PENDING)
   notes             String?
-  createdAt         DateTime    @default(now()) @map("created_at")
-  approvedAt        DateTime?   @map("approved_at")
-  approvedBy        String?     @map("approved_by")
-  rejectionReason   String?     @map("rejection_reason")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  approvedAt        DateTime?    @map("approved_at")
+  approvedBy        String?      @map("approved_by")
+  rejectionReason   String?      @map("rejection_reason")
+  standingOrderId   String?      @map("standing_order_id") // Set when order was generated from a standing order
+  modificationRequestedAt DateTime? @map("modification_requested_at")
+  modificationMessage     String?   @map("modification_message") // Admin message to buyer when requesting modification
 
-  buyer           Buyer                @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  deliveryAddress DeliveryAddress      @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
-  assignments     DeliveryAssignment[]
+  buyer            Buyer                @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  deliveryAddress  DeliveryAddress      @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
+  standingOrder    StandingOrder?       @relation(fields: [standingOrderId], references: [id], onDelete: SetNull)
+  assignments      DeliveryAssignment[]
 
   @@index([buyerId])
   @@index([status])
   @@index([deliveryDate])
   @@index([productType])
+  @@index([standingOrderId])
   @@map("orders")
+}
+
+// Milestone 3: Standing (recurring) order template
+model StandingOrder {
+  id                        String   @id @default(cuid())
+  buyerId                   String   @map("buyer_id")
+  productType               String   @map("product_type")
+  quantity                  Int
+  preferredDeliveryDayOfWeek Int     @map("preferred_delivery_day_of_week") // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  deliveryAddressId         String   @map("delivery_address_id")
+  startDate                 DateTime @map("start_date")
+  endDate                   DateTime? @map("end_date") // Optional; null = no end
+  isActive                  Boolean  @default(true) @map("is_active")
+  notes                     String?
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  buyer            Buyer           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  deliveryAddress  DeliveryAddress @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
+  generatedOrders  Order[]
+
+  @@unique([buyerId, productType, deliveryAddressId]) // One active standing order per buyer/product/address
+  @@index([buyerId])
+  @@index([isActive])
+  @@map("standing_orders")
 }
 
 model DeliveryAssignment {
@@ -305,7 +350,8 @@ model DeliveryAssignment {
   qualityResult     QualityResult? @map("quality_result")
   confirmationNotes String?        @map("confirmation_notes")
   confirmedBy       String?        @map("confirmed_by")
-  confirmedAt       DateTime?      @map("confirmed_at")
+  confirmedAt         DateTime?      @map("confirmed_at")
+  estimatedTimeWindow  String?        @map("estimated_time_window") // e.g. "9:00-12:00" (US-BUYER-004)
 
   order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   farmer          Farmer          @relation(fields: [farmerId], references: [id], onDelete: Cascade)
@@ -393,4 +439,59 @@ model FarmerPerformanceBreakdown {
 
   @@index([farmerId])
   @@map("farmer_performance_breakdown")
+}
+
+// Milestone 3: Admin-configurable performance rules (single active set)
+model PerformanceRule {
+  id                  String   @id @default(cuid())
+  tierThresholds      Json     @map("tier_thresholds") // e.g. { PROBATIONARY: 0, STANDARD: 70, PREFERRED: 85 }
+  scoreWeights        Json     @map("score_weights") // e.g. { onTimeDelivery: 0.3, quantityAccuracy: 0.3, quality: 0.25, availabilitySubmission: 0.15 }
+  penalties           Json     @map("penalties") // e.g. { lateSubmission: -5, missedDelivery: -15, qualityFail: -20 }
+  warningTriggers     Json     @map("warning_triggers") // e.g. { deliveriesBeforeProbation: 1 }
+  effectiveFrom       DateTime @default(now()) @map("effective_from")
+  updatedBy           String?  @map("updated_by")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([effectiveFrom])
+  @@map("performance_rules")
+}
+
+// Milestone 3: In-app notifications (email/SMS sent separately; this is for dashboard history)
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String   // e.g. APPLICATION_REVIEWED, NEW_ASSIGNMENT, ORDER_APPROVED, TIER_CHANGED
+  title     String
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  metadata  Json?    // e.g. { orderId, deliveryAssignmentId }
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// Milestone 3: Support tickets (buyers only)
+model SupportTicket {
+  id               String       @id @default(cuid())
+  userId           String       @map("user_id")
+  subject          String
+  message          String
+  status           TicketStatus @default(OPEN)
+  adminResponse    String?      @map("admin_response")
+  adminRespondedBy String?      @map("admin_responded_by")
+  adminRespondedAt DateTime?    @map("admin_responded_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
 }

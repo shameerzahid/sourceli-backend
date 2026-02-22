@@ -1,4 +1,15 @@
 import { prisma } from '../config/database.js';
+import { env } from '../config/env.js';
+
+/**
+ * Get allowed delivery coverage regions (US-BUYER-005).
+ * From env DELIVERY_COVERAGE_REGIONS (comma-separated). Empty if not set.
+ */
+export function getDeliveryCoverageRegions(): string[] {
+  const raw = env.DELIVERY_COVERAGE_REGIONS;
+  if (!raw || !raw.trim()) return [];
+  return raw.split(',').map((r) => r.trim()).filter(Boolean);
+}
 
 export interface CreateProduceCategoryData {
   name: string;

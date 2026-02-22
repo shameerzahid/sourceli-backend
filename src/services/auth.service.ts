@@ -38,6 +38,7 @@ export interface BuyerRegistrationData {
   deliveryAddresses: {
     address: string;
     landmark?: string;
+    region?: string;
     isDefault?: boolean;
   }[];
 }
@@ -196,14 +197,36 @@ export async function registerBuyer(
       },
     });
 
-    // Create delivery addresses if provided
+    // Create delivery addresses if provided (validate region against coverage in buyer.service style)
     if (data.deliveryAddresses && data.deliveryAddresses.length > 0) {
+      const { getDeliveryCoverageRegions } = await import('./system.service.js');
+      const allowedRegions = getDeliveryCoverageRegions();
+      for (const addr of data.deliveryAddresses) {
+        if (allowedRegions.length > 0) {
+          const region = addr.region?.trim();
+          if (!region) {
+            throw createError(
+              'Region is required. We currently deliver to: ' + allowedRegions.join(', '),
+              400,
+              'REGION_REQUIRED'
+            );
+          }
+          if (!allowedRegions.includes(region)) {
+            throw createError(
+              `We don't deliver to "${region}". Currently delivered regions: ${allowedRegions.join(', ')}`,
+              400,
+              'REGION_NOT_IN_COVERAGE'
+            );
+          }
+        }
+      }
       await tx.deliveryAddress.createMany({
         data: data.deliveryAddresses.map((addr, index) => ({
           buyerId: buyer.id,
           address: addr.address,
           landmark: addr.landmark,
-          isDefault: addr.isDefault || (index === 0 && !addr.isDefault), // First one is default if none specified
+          region: addr.region?.trim() || null,
+          isDefault: addr.isDefault ?? (index === 0),
         })),
       });
     }

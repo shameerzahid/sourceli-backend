@@ -10,6 +10,8 @@ import adminRoutes from './routes/admin.routes.js';
 import systemRoutes from './routes/system.routes.js';
 import farmerRoutes from './routes/farmer.routes.js';
 import buyerRoutes from './routes/buyer.routes.js';
+import { scheduleStandingOrderJob } from './jobs/standingOrderJob.js';
+import { scheduleDeliveryReminderJob } from './jobs/deliveryReminderJob.js';
 
 const app = express();
 const PORT = env.PORT;
@@ -145,6 +147,10 @@ app.listen(PORT, () => {
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🌍 Environment: ${env.NODE_ENV}`);
   console.log(`🔐 CORS Origin: ${env.CORS_ORIGIN}`);
+  if (env.NODE_ENV !== 'test') {
+    scheduleStandingOrderJob();
+    scheduleDeliveryReminderJob();
+  }
   console.log(`\n📡 API Endpoints:`);
   console.log(`   POST /api/auth/register/farmer - Register as farmer`);
   console.log(`   POST /api/auth/register/buyer - Register as buyer`);

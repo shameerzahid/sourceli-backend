@@ -1,20 +1,8 @@
 import { prisma } from '../config/database.js';
 import { PerformanceTier, AssignmentStatus, QualityResult } from '@prisma/client';
 import { createError } from '../middleware/errorHandler.js';
-
-// Default performance rules (can be made configurable later)
-const DEFAULT_TIER_THRESHOLDS = {
-  PROBATIONARY: 0,
-  STANDARD: 50,
-  PREFERRED: 85,
-};
-
-const DEFAULT_SCORE_WEIGHTS = {
-  onTimeDelivery: 0.3,      // 30%
-  quantityAccuracy: 0.3,     // 30%
-  quality: 0.25,              // 25%
-  availabilitySubmission: 0.15, // 15%
-};
+import { getActivePerformanceRules } from './performanceRules.service.js';
+import type { TierThresholds, ScoreWeights, Penalties } from './performanceRules.service.js';
 
 const DEFAULT_BASE_SCORE = 50; // Starting score for Probationary farmers
 
@@ -25,18 +13,19 @@ interface PerformanceBreakdown {
   availabilitySubmissionScore: number;
 }
 
-interface PerformanceData {
+export interface PerformanceData {
   score: number;
   tier: PerformanceTier;
   breakdown: PerformanceBreakdown;
 }
 
 /**
- * Calculate performance score for a farmer
- * Based on: on-time delivery, quantity accuracy, quality, availability submission
+ * Calculate performance score for a farmer using active rules from DB.
+ * Applies penalties for late submission, missed delivery, quality fail.
  */
 export async function calculatePerformanceScore(farmerId: string): Promise<PerformanceData> {
-  // Get all confirmed deliveries (DELIVERED or FAILED status)
+  const rules = await getActivePerformanceRules();
+
   const confirmedDeliveries = await prisma.deliveryAssignment.findMany({
     where: {
       farmerId,
@@ -52,24 +41,17 @@ export async function calculatePerformanceScore(farmerId: string): Promise<Perfo
     },
   });
 
-  // Get availability submission history (last 8 weeks for calculation)
   const availabilityHistory = await prisma.weeklyAvailability.findMany({
-    where: {
-      farmerId,
-    },
-    orderBy: {
-      weekStartDate: 'desc',
-    },
-    take: 8, // Last 8 weeks
+    where: { farmerId },
+    orderBy: { weekStartDate: 'desc' },
+    take: 8,
   });
 
-  // Calculate component scores
   const onTimeDeliveryScore = calculateOnTimeDeliveryScore(confirmedDeliveries);
   const quantityAccuracyScore = calculateQuantityAccuracyScore(confirmedDeliveries);
   const qualityScore = calculateQualityScore(confirmedDeliveries);
   const availabilitySubmissionScore = calculateAvailabilitySubmissionScore(availabilityHistory);
 
-  // Calculate weighted total score
   const breakdown: PerformanceBreakdown = {
     onTimeDeliveryScore,
     quantityAccuracyScore,
@@ -77,19 +59,28 @@ export async function calculatePerformanceScore(farmerId: string): Promise<Perfo
     availabilitySubmissionScore,
   };
 
-  const totalScore = Math.round(
+  const weights = rules.scoreWeights;
+  let totalScore =
     DEFAULT_BASE_SCORE +
-    (onTimeDeliveryScore * DEFAULT_SCORE_WEIGHTS.onTimeDelivery) +
-    (quantityAccuracyScore * DEFAULT_SCORE_WEIGHTS.quantityAccuracy) +
-    (qualityScore * DEFAULT_SCORE_WEIGHTS.quality) +
-    (availabilitySubmissionScore * DEFAULT_SCORE_WEIGHTS.availabilitySubmission)
-  );
+    (onTimeDeliveryScore * weights.onTimeDelivery) +
+    (quantityAccuracyScore * weights.quantityAccuracy) +
+    (qualityScore * weights.quality) +
+    (availabilitySubmissionScore * weights.availabilitySubmission);
 
-  // Clamp score between 0 and 100
-  const finalScore = Math.max(0, Math.min(100, totalScore));
+  // Apply penalties from rules
+  const lateCount = availabilityHistory.filter((av) => av.isLate).length;
+  const missedCount = confirmedDeliveries.filter((d) => d.status === AssignmentStatus.FAILED).length;
+  const qualityFailCount = confirmedDeliveries.filter(
+    (d) => d.status === AssignmentStatus.DELIVERED && d.qualityResult === QualityResult.FAIL
+  ).length;
 
-  // Determine tier based on score
-  const tier = determineTier(finalScore);
+  const penalties = rules.penalties;
+  totalScore += lateCount * (penalties.lateSubmission ?? 0);
+  totalScore += missedCount * (penalties.missedDelivery ?? 0);
+  totalScore += qualityFailCount * (penalties.qualityFail ?? 0);
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(totalScore)));
+  const tier = determineTier(finalScore, rules.tierThresholds);
 
   return {
     score: finalScore,
@@ -215,28 +206,29 @@ function calculateAvailabilitySubmissionScore(availabilityHistory: any[]): numbe
 }
 
 /**
- * Determine tier based on score
+ * Determine tier based on score and configured thresholds
  */
-function determineTier(score: number): PerformanceTier {
-  if (score >= DEFAULT_TIER_THRESHOLDS.PREFERRED) {
+function determineTier(score: number, thresholds: TierThresholds): PerformanceTier {
+  if (score >= (thresholds.PREFERRED ?? 85)) {
     return PerformanceTier.PREFERRED;
-  } else if (score >= DEFAULT_TIER_THRESHOLDS.STANDARD) {
-    return PerformanceTier.STANDARD;
-  } else {
-    return PerformanceTier.PROBATIONARY;
   }
+  if (score >= (thresholds.STANDARD ?? 70)) {
+    return PerformanceTier.STANDARD;
+  }
+  return PerformanceTier.PROBATIONARY;
 }
 
 /**
  * Update farmer performance score and tier
- * Creates or updates performance record and logs history
+ * Creates or updates performance record and logs history.
+ * Returns previous and new tier for notification triggers.
  */
 export async function updatePerformanceScore(
   farmerId: string,
   reason: string,
   deliveryAssignmentId?: string,
   createdBy?: string
-): Promise<void> {
+): Promise<{ previousTier: PerformanceTier; newTier: PerformanceTier }> {
   // Calculate new performance
   const performanceData = await calculatePerformanceScore(farmerId);
 
@@ -245,7 +237,7 @@ export async function updatePerformanceScore(
     where: { farmerId },
   });
 
-  const previousScore = currentPerformance?.score ?? DEFAULT_BASE_SCORE;
+  const previousScore = currentPerformance?.score ?? 50;
   const previousTier = currentPerformance?.tier ?? PerformanceTier.PROBATIONARY;
 
   // Update or create performance record
@@ -298,6 +290,11 @@ export async function updatePerformanceScore(
       },
     });
   }
+
+  return {
+    previousTier,
+    newTier: performanceData.tier,
+  };
 }
 
 /**
@@ -419,16 +416,104 @@ export async function getPerformanceTrend(farmerId: string, days: number = 30) {
 }
 
 /**
- * Get tier thresholds (for display purposes)
+ * Get tier thresholds (from active rules)
  */
-export function getTierThresholds() {
-  return DEFAULT_TIER_THRESHOLDS;
+export async function getTierThresholds() {
+  const rules = await getActivePerformanceRules();
+  return rules.tierThresholds;
 }
 
 /**
- * Get score weights (for display purposes)
+ * Get score weights (from active rules)
  */
-export function getScoreWeights() {
-  return DEFAULT_SCORE_WEIGHTS;
+export async function getScoreWeights() {
+  const rules = await getActivePerformanceRules();
+  return rules.scoreWeights;
+}
+
+/**
+ * Get warnings for farmer (e.g. "one more missed delivery → probation") from warning triggers.
+ */
+export async function getPerformanceWarnings(farmerId: string): Promise<string[]> {
+  const rules = await getActivePerformanceRules();
+  const triggers = rules.warningTriggers;
+  const warnings: string[] = [];
+
+  const performance = await prisma.farmerPerformance.findUnique({
+    where: { farmerId },
+  });
+  if (!performance) return warnings;
+
+  const beforeProbation = triggers.deliveriesBeforeProbation;
+  if (beforeProbation !== undefined && performance.tier !== PerformanceTier.PROBATIONARY) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentFailed = await prisma.deliveryAssignment.count({
+      where: {
+        farmerId,
+        status: AssignmentStatus.FAILED,
+        confirmedAt: {
+          not: null,
+          gte: thirtyDaysAgo,
+        },
+      },
+    });
+    if (recentFailed >= (beforeProbation - 1) && recentFailed < beforeProbation) {
+      warnings.push(
+        `Miss one more delivery and your tier may drop to Probationary.`
+      );
+    }
+  }
+
+  return warnings;
+}
+
+/**
+ * Admin override: set farmer score and/or tier with reason (audit logged).
+ */
+export async function overridePerformanceScore(
+  farmerId: string,
+  adminId: string,
+  data: { score?: number; tier?: PerformanceTier; reason: string }
+): Promise<void> {
+  const farmer = await prisma.farmer.findUnique({
+    where: { id: farmerId },
+    include: { performance: true },
+  });
+  if (!farmer) {
+    throw createError('Farmer not found', 404, 'FARMER_NOT_FOUND');
+  }
+
+  const current = farmer.performance;
+  const previousScore = current?.score ?? 50;
+  const previousTier = current?.tier ?? PerformanceTier.PROBATIONARY;
+  const newScore = data.score ?? previousScore;
+  const newTier = data.tier ?? previousTier;
+
+  const clampedScore = Math.max(0, Math.min(100, newScore));
+
+  await prisma.farmerPerformance.upsert({
+    where: { farmerId },
+    create: {
+      farmerId,
+      score: clampedScore,
+      tier: newTier,
+    },
+    update: {
+      score: clampedScore,
+      tier: newTier,
+    },
+  });
+
+  await prisma.farmerPerformanceHistory.create({
+    data: {
+      farmerId,
+      previousScore,
+      newScore: clampedScore,
+      previousTier,
+      newTier,
+      reason: `Admin override: ${data.reason}`,
+      createdBy: adminId,
+    },
+  });
 }
 

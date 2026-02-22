@@ -1,5 +1,6 @@
 import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
 import { hashPassword } from '../src/utils/password.js';
+import { seedDefaultPerformanceRulesIfEmpty } from '../src/services/performanceRules.service.js';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
@@ -101,6 +102,11 @@ async function main() {
     }
   }
   console.log('✅ Produce categories seeded\n');
+
+  // Seed default performance rules if none exist (Milestone 3)
+  console.log('📊 Seeding performance rules...');
+  await seedDefaultPerformanceRulesIfEmpty();
+  console.log('✅ Performance rules seeded\n');
 }
 
 main()
