@@ -51,6 +51,31 @@ export function normalizePhone(phone: string): string {
 }
 
 /**
+ * Convert phone to E.164 for Twilio/SMS (e.g. +923001234567).
+ * - If already starts with +: normalize digits and ensure single + prefix.
+ * - If starts with 0 (e.g. 03XXXXXXXXX): treat as Pakistan, replace leading 0 with defaultCountryCode.
+ * - Otherwise: prepend + and defaultCountryCode.
+ * @param phone - Raw phone input
+ * @param defaultCountryCode - Country code without + (e.g. '92' for Pakistan)
+ */
+export function toE164(phone: string, defaultCountryCode = '92'): string {
+  if (!phone || typeof phone !== 'string') return '';
+  const digitsOnly = phone.replace(/\D/g, '');
+  if (digitsOnly.length < 10) return '';
+
+  if (phone.trim().startsWith('+')) {
+    return '+' + digitsOnly;
+  }
+  if (digitsOnly.startsWith('0') && digitsOnly.length >= 10) {
+    return '+' + defaultCountryCode + digitsOnly.slice(1);
+  }
+  if (digitsOnly.startsWith(defaultCountryCode)) {
+    return '+' + digitsOnly;
+  }
+  return '+' + defaultCountryCode + digitsOnly;
+}
+
+/**
  * Basic input sanitization to prevent XSS
  * Removes potentially dangerous characters
  * @param input - Input string to sanitize

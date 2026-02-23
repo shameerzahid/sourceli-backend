@@ -6,6 +6,7 @@ import {
   verifyRefreshToken,
   TokenPayload,
 } from '../utils/jwt.js';
+import { toE164, isValidPhone } from '../utils/validation.js';
 import { UserRole, UserStatus, BuyerType } from '@prisma/client';
 import { createError } from '../middleware/errorHandler.js';
 
@@ -68,10 +69,15 @@ export interface AuthResponse {
 export async function registerFarmer(
   data: FarmerRegistrationData
 ): Promise<{ userId: string; farmerId: string; applicationId: string }> {
+  const phoneE164 = toE164(data.phone);
+  if (!phoneE164) {
+    throw createError('Invalid phone number format', 400, 'INVALID_PHONE');
+  }
+
   // Check if email or phone already exists
   const existingUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email: data.email }, { phone: data.phone }],
+      OR: [{ email: data.email }, { phone: phoneE164 }, { phone: data.phone }],
     },
   });
 
@@ -88,11 +94,11 @@ export async function registerFarmer(
 
   // Create user, farmer, and application in a transaction
   const result = await prisma.$transaction(async (tx) => {
-    // Create user
+    // Create user (store E.164 so SMS/Twilio works)
     const user = await tx.user.create({
       data: {
         email: data.email,
-        phone: data.phone,
+        phone: phoneE164,
         passwordHash,
         role: UserRole.FARMER,
         status: UserStatus.APPLIED, // Starts as APPLIED, needs admin approval
@@ -147,10 +153,15 @@ export async function registerFarmer(
 export async function registerBuyer(
   data: BuyerRegistrationData
 ): Promise<{ userId: string; buyerId: string; registrationId: string }> {
+  const phoneE164 = toE164(data.phone);
+  if (!phoneE164) {
+    throw createError('Invalid phone number format', 400, 'INVALID_PHONE');
+  }
+
   // Check if email or phone already exists
   const existingUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email: data.email }, { phone: data.phone }],
+      OR: [{ email: data.email }, { phone: phoneE164 }, { phone: data.phone }],
     },
   });
 
@@ -167,11 +178,11 @@ export async function registerBuyer(
 
   // Create user, buyer, registration, and delivery addresses in a transaction
   const result = await prisma.$transaction(async (tx) => {
-    // Create user
+    // Create user (store E.164 so SMS/Twilio works)
     const user = await tx.user.create({
       data: {
         email: data.email,
-        phone: data.phone,
+        phone: phoneE164,
         passwordHash,
         role: UserRole.BUYER,
         status: UserStatus.PENDING, // Starts as PENDING, needs admin approval
@@ -248,10 +259,15 @@ export async function registerBuyer(
 export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
   const { emailOrPhone, password } = credentials;
 
-  // Find user by email or phone
+  // Find user by email or phone (normalize phone so 03... and +92... both work)
+  const phoneLookups: { phone: string }[] = [{ phone: emailOrPhone.trim() }];
+  if (isValidPhone(emailOrPhone)) {
+    const e164 = toE164(emailOrPhone);
+    if (e164) phoneLookups.push({ phone: e164 });
+  }
   const user = await prisma.user.findFirst({
     where: {
-      OR: [{ email: emailOrPhone }, { phone: emailOrPhone }],
+      OR: [{ email: emailOrPhone.trim() }, ...phoneLookups],
     },
     include: {
       farmer: true,

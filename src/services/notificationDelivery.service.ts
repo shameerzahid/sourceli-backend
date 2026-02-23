@@ -2,6 +2,8 @@ import { prisma } from '../config/database.js';
 import { createNotification, type CreateNotificationData, type NotificationType } from './notification.service.js';
 import { env } from '../config/env.js';
 import { triggerNotification } from '../utils/pusher.js';
+import { toE164 } from '../utils/validation.js';
+import { getEmailHtml } from '../templates/emailTemplate.js';
 
 export interface NotifyUserOptions {
   sendEmail?: boolean;
@@ -50,15 +52,18 @@ export async function notifyUser(
   const shouldSms = options.sendSms !== false && user.phone;
 
   if (shouldEmail && env.SENDGRID_API_KEY && env.SENDGRID_FROM_EMAIL) {
-    sendEmailAsync(user.email!, title, message).catch((err) =>
+    sendEmailAsync(user.email!, title, message, getEmailHtml(title, message)).catch((err) =>
       console.error('[Notification] Email send failed:', err)
     );
   }
 
   if (shouldSms && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER) {
-    sendSmsAsync(user.phone!, message).catch((err) =>
-      console.error('[Notification] SMS send failed:', err)
-    );
+    const phoneE164 = toE164(user.phone!);
+    if (phoneE164) {
+      sendSmsAsync(phoneE164, message).catch((err) =>
+        console.error('[Notification] SMS send failed:', err)
+      );
+    }
   }
 
   return { notificationId: notification.id };
@@ -66,11 +71,22 @@ export async function notifyUser(
 
 /**
  * Send email via SendGrid API (fire-and-forget).
+ * Sends both plain text and HTML; clients that support HTML will show the branded template.
  */
-async function sendEmailAsync(to: string, subject: string, text: string): Promise<void> {
+async function sendEmailAsync(
+  to: string,
+  subject: string,
+  text: string,
+  html?: string
+): Promise<void> {
   const key = env.SENDGRID_API_KEY;
   const from = env.SENDGRID_FROM_EMAIL;
   if (!key || !from) return;
+
+  const content: { type: string; value: string }[] = [{ type: 'text/plain', value: text }];
+  if (html) {
+    content.push({ type: 'text/html', value: html });
+  }
 
   const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
@@ -82,7 +98,7 @@ async function sendEmailAsync(to: string, subject: string, text: string): Promis
       personalizations: [{ to: [{ email: to }] }],
       from: { email: from, name: 'Sourceli' },
       subject,
-      content: [{ type: 'text/plain', value: text }],
+      content,
     }),
   });
 

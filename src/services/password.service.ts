@@ -1,6 +1,7 @@
 import { prisma } from '../config/database.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { createError } from '../middleware/errorHandler.js';
+import { toE164, isValidPhone } from '../utils/validation.js';
 import * as crypto from 'crypto';
 
 // Password reset token storage (in production, use Redis or database)
@@ -33,10 +34,15 @@ setInterval(() => {
 export async function generatePasswordResetToken(
   emailOrPhone: string
 ): Promise<string> {
-  // Find user by email or phone
+  // Find user by email or phone (normalize phone for E.164 match)
+  const phoneLookups: { phone: string }[] = [{ phone: emailOrPhone.trim() }];
+  if (isValidPhone(emailOrPhone)) {
+    const e164 = toE164(emailOrPhone);
+    if (e164) phoneLookups.push({ phone: e164 });
+  }
   const user = await prisma.user.findFirst({
     where: {
-      OR: [{ email: emailOrPhone }, { phone: emailOrPhone }],
+      OR: [{ email: emailOrPhone.trim() }, ...phoneLookups],
     },
   });
 
