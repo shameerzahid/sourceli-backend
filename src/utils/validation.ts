@@ -66,6 +66,10 @@ export function toE164(phone: string, defaultCountryCode = '92'): string {
   if (phone.trim().startsWith('+')) {
     return '+' + digitsOnly;
   }
+  // Already has country code (e.g. 233..., 92... from frontend)
+  if (digitsOnly.length >= 11 && digitsOnly.length <= 15 && !digitsOnly.startsWith('0')) {
+    return '+' + digitsOnly;
+  }
   if (digitsOnly.startsWith('0') && digitsOnly.length >= 10) {
     return '+' + defaultCountryCode + digitsOnly.slice(1);
   }
