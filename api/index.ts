@@ -14,6 +14,7 @@ import adminRoutes from '../src/routes/admin.routes.js';
 import farmerRoutes from '../src/routes/farmer.routes.js';
 import buyerRoutes from '../src/routes/buyer.routes.js';
 import systemRoutes from '../src/routes/system.routes.js';
+import cronRoutes from '../src/routes/cron.routes.js';
 
 const app = express();
 
@@ -165,6 +166,9 @@ app.use('/api/farmers', farmerRoutes);
 
 // Buyer routes (protected by authentication and buyer role)
 app.use('/api/buyers', buyerRoutes);
+
+// Cron routes (for Vercel: use external scheduler with CRON_SECRET)
+app.use('/api/cron', cronRoutes);
 
 // 404 handler
 app.use((_req: express.Request, res: express.Response) => {

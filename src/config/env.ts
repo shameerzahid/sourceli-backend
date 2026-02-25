@@ -32,6 +32,8 @@ const envSchema = z.object({
   PUSHER_CLUSTER: z.string().optional(),
   // Delivery coverage: comma-separated region names (US-BUYER-005). If set, delivery addresses must use one of these regions.
   DELIVERY_COVERAGE_REGIONS: z.string().optional(),
+  // Cron jobs (required when backend is on Vercel): secret for /api/cron/* endpoints. Use external scheduler (e.g. cron-job.org) to call these with Authorization: Bearer <CRON_SECRET>.
+  CRON_SECRET: z.string().optional(),
 });
 
 function validateEnv() {
