@@ -6,10 +6,12 @@ import {
   getFarmerApplicationByIdHandler,
   approveFarmerApplicationHandler,
   rejectFarmerApplicationHandler,
+  createSupplierHandler,
   getPendingBuyerRegistrationsHandler,
   getBuyerRegistrationByIdHandler,
   approveBuyerRegistrationHandler,
   rejectBuyerRegistrationHandler,
+  createBuyerHandler,
   getAllFarmersHandler,
   getAllBuyersHandler,
   updateFarmerStatusHandler,
@@ -75,8 +77,10 @@ router.post('/buyers/registrations/:id/reject', rejectBuyerRegistrationHandler);
 
 // User Management
 router.get('/farmers', getAllFarmersHandler);
+router.post('/farmers', createSupplierHandler);
 router.put('/farmers/:id/status', updateFarmerStatusHandler);
 router.get('/buyers', getAllBuyersHandler);
+router.post('/buyers', createBuyerHandler);
 router.put('/buyers/:id/status', updateBuyerStatusHandler);
 
 // Order Management

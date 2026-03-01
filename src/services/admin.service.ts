@@ -1,6 +1,10 @@
 import { prisma } from '../config/database.js';
-import { UserStatus, OrderStatus, AssignmentStatus, PaymentStatus, TicketStatus } from '@prisma/client';
+import { UserStatus, UserRole, PerformanceTier, OrderStatus, AssignmentStatus, PaymentStatus, TicketStatus } from '@prisma/client';
 import { notifyUser } from './notificationDelivery.service.js';
+import { hashPassword } from '../utils/password.js';
+import { toE164 } from '../utils/validation.js';
+import { createError } from '../middleware/errorHandler.js';
+import { createAuditLog } from '../utils/auditLog.js';
 
 export interface ApproveFarmerData {
   adminNotes?: string;
@@ -430,6 +434,265 @@ export async function rejectBuyerRegistration(
     data.rejectionReason || 'Your buyer registration was not approved. Please contact support.',
     { registrationId, rejectionReason: data.rejectionReason }
   ).catch((err) => console.error('[Notification]', err));
+
+  return result;
+}
+
+export interface CreateSupplierAsAdminData {
+  email: string;
+  phone: string;
+  password: string;
+  fullName: string;
+  farmName?: string;
+  region: string;
+  town: string;
+  weeklyCapacityMin: number;
+  weeklyCapacityMax: number;
+  produceCategory: string;
+  feedingMethod: string;
+  termsAccepted?: boolean;
+  photoUrls?: string[];
+}
+
+/**
+ * Create a supplier (farmer) manually as admin. No approval step: the supplier is created
+ * as already approved (User status PROBATIONARY, FarmerApplication PROBATIONARY with reviewedAt,
+ * FarmerPerformance score 50). They can log in immediately with the password provided.
+ */
+export async function createSupplierAsAdmin(
+  adminId: string,
+  data: CreateSupplierAsAdminData
+): Promise<{ userId: string; farmerId: string; applicationId: string }> {
+  const phoneE164 = toE164(data.phone);
+  if (!phoneE164) {
+    throw createError('Invalid phone number format', 400, 'INVALID_PHONE');
+  }
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ email: data.email }, { phone: phoneE164 }, { phone: data.phone }],
+    },
+  });
+
+  if (existingUser) {
+    throw createError(
+      'Email or phone number already registered',
+      409,
+      'DUPLICATE_USER'
+    );
+  }
+
+  const passwordHash = await hashPassword(data.password);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: data.email,
+        phone: phoneE164,
+        passwordHash,
+        role: UserRole.FARMER,
+        status: UserStatus.PROBATIONARY,
+      },
+    });
+
+    const farmer = await tx.farmer.create({
+      data: {
+        userId: user.id,
+        fullName: data.fullName,
+        farmName: data.farmName,
+        region: data.region,
+        town: data.town,
+        weeklyCapacityMin: data.weeklyCapacityMin,
+        weeklyCapacityMax: data.weeklyCapacityMax,
+        produceCategory: data.produceCategory,
+        feedingMethod: data.feedingMethod,
+        verificationDate: new Date(),
+        verificationAdminId: adminId,
+      },
+    });
+
+    const application = await tx.farmerApplication.create({
+      data: {
+        farmerId: farmer.id,
+        status: UserStatus.PROBATIONARY,
+        termsAccepted: data.termsAccepted ?? true,
+        termsAcceptedAt: new Date(),
+        reviewedAt: new Date(),
+      },
+    });
+
+    await tx.farmerPerformance.create({
+      data: {
+        farmerId: farmer.id,
+        score: 50,
+        tier: PerformanceTier.PROBATIONARY,
+      },
+    });
+
+    await tx.farmerPerformanceBreakdown.create({
+      data: {
+        farmerId: farmer.id,
+        onTimeDeliveryScore: null,
+        quantityAccuracyScore: null,
+        qualityScore: null,
+        availabilitySubmissionScore: null,
+      },
+    });
+
+    if (data.photoUrls && data.photoUrls.length > 0) {
+      await tx.farmPhoto.createMany({
+        data: data.photoUrls.map((url) => ({
+          farmerId: farmer.id,
+          filePath: url,
+          fileType: 'image',
+        })),
+      });
+    }
+
+    return {
+      userId: user.id,
+      farmerId: farmer.id,
+      applicationId: application.id,
+    };
+  });
+
+  await createAuditLog({
+    userId: adminId,
+    actionType: 'ADMIN_CREATE_SUPPLIER',
+    entityType: 'Farmer',
+    entityId: result.farmerId,
+    details: { userId: result.userId, applicationId: result.applicationId },
+  });
+
+  return result;
+}
+
+export interface CreateBuyerAsAdminData {
+  email: string;
+  phone: string;
+  password: string;
+  fullName: string;
+  businessName?: string;
+  buyerType: 'RESTAURANT' | 'HOTEL' | 'CATERER' | 'INDIVIDUAL';
+  contactPerson: string;
+  estimatedVolume?: number;
+  deliveryAddresses: {
+    address: string;
+    landmark?: string;
+    region?: string;
+    isDefault?: boolean;
+  }[];
+}
+
+/**
+ * Create a buyer manually as admin. No approval step: the buyer is created
+ * as already approved (User status ACTIVE, BuyerRegistration ACTIVE with reviewedAt).
+ * They can log in immediately with the password provided.
+ */
+export async function createBuyerAsAdmin(
+  adminId: string,
+  data: CreateBuyerAsAdminData
+): Promise<{ userId: string; buyerId: string; registrationId: string }> {
+  const phoneE164 = toE164(data.phone);
+  if (!phoneE164) {
+    throw createError('Invalid phone number format', 400, 'INVALID_PHONE');
+  }
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ email: data.email }, { phone: phoneE164 }, { phone: data.phone }],
+    },
+  });
+
+  if (existingUser) {
+    throw createError(
+      'Email or phone number already registered',
+      409,
+      'DUPLICATE_USER'
+    );
+  }
+
+  const passwordHash = await hashPassword(data.password);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: data.email,
+        phone: phoneE164,
+        passwordHash,
+        role: UserRole.BUYER,
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    const buyer = await tx.buyer.create({
+      data: {
+        userId: user.id,
+        fullName: data.fullName,
+        businessName: data.businessName,
+        buyerType: data.buyerType,
+        contactPerson: data.contactPerson,
+        estimatedVolume: data.estimatedVolume,
+        verificationDate: new Date(),
+        verificationAdminId: adminId,
+      },
+    });
+
+    const registration = await tx.buyerRegistration.create({
+      data: {
+        buyerId: buyer.id,
+        status: UserStatus.ACTIVE,
+        reviewedAt: new Date(),
+      },
+    });
+
+    if (data.deliveryAddresses && data.deliveryAddresses.length > 0) {
+      const { getDeliveryCoverageRegions } = await import('./system.service.js');
+      const allowedRegions = getDeliveryCoverageRegions();
+      for (const addr of data.deliveryAddresses) {
+        if (allowedRegions.length > 0) {
+          const region = addr.region?.trim();
+          if (!region) {
+            throw createError(
+              'Region is required. We currently deliver to: ' + allowedRegions.join(', '),
+              400,
+              'REGION_REQUIRED'
+            );
+          }
+          if (!allowedRegions.includes(region)) {
+            throw createError(
+              `We don't deliver to "${region}". Currently delivered regions: ${allowedRegions.join(', ')}`,
+              400,
+              'REGION_NOT_IN_COVERAGE'
+            );
+          }
+        }
+      }
+      await tx.deliveryAddress.createMany({
+        data: data.deliveryAddresses.map((addr, index) => ({
+          buyerId: buyer.id,
+          address: addr.address,
+          landmark: addr.landmark,
+          region: addr.region?.trim() || null,
+          isDefault: addr.isDefault ?? (index === 0),
+        })),
+      });
+    }
+
+    return {
+      userId: user.id,
+      buyerId: buyer.id,
+      registrationId: registration.id,
+    };
+  });
+
+  await createAuditLog({
+    userId: adminId,
+    actionType: 'ADMIN_CREATE_BUYER',
+    entityType: 'Buyer',
+    entityId: result.buyerId,
+    details: { userId: result.userId, registrationId: result.registrationId },
+  });
 
   return result;
 }

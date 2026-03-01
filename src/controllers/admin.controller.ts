@@ -5,10 +5,12 @@ import {
   getFarmerApplicationById,
   approveFarmerApplication,
   rejectFarmerApplication,
+  createSupplierAsAdmin,
   getPendingBuyerRegistrations,
   getBuyerRegistrationById,
   approveBuyerRegistration,
   rejectBuyerRegistration,
+  createBuyerAsAdmin,
   getAllFarmers,
   getAllBuyers,
   updateFarmerStatus,
@@ -37,6 +39,8 @@ import {
   updatePricingBandSchema,
   requestOrderModificationSchema,
 } from '../validators/admin.validator.js';
+import { buyerRegistrationSchema } from '../validators/auth.validator.js';
+import { createSupplierSchema } from '../validators/admin.validator.js';
 import {
   getPerformanceRulesRecord,
   getActivePerformanceRules,
@@ -164,6 +168,44 @@ export const rejectFarmerApplicationHandler = wrapAsync(
 );
 
 /**
+ * Create a supplier (farmer) manually (admin only). Same payload as farmer registration; user is created as PROBATIONARY (approved).
+ */
+export const createSupplierHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = createSupplierSchema.parse(req.body);
+
+    const createData = {
+      email: validatedData.email.toLowerCase().trim(),
+      phone: validatedData.phone.trim(),
+      password: validatedData.password,
+      fullName: validatedData.fullName.trim(),
+      farmName: validatedData.farmName?.trim(),
+      region: validatedData.region.trim(),
+      town: validatedData.town.trim(),
+      weeklyCapacityMin: validatedData.weeklyCapacityMin,
+      weeklyCapacityMax: validatedData.weeklyCapacityMax,
+      produceCategory: validatedData.produceCategory.trim(),
+      feedingMethod: validatedData.feedingMethod.trim(),
+      termsAccepted: validatedData.termsAccepted ?? true,
+      photoUrls: validatedData.photoUrls,
+    };
+
+    const result = await createSupplierAsAdmin(adminId, createData);
+
+    res.status(201).json({
+      success: true,
+      message: 'Supplier added successfully.',
+      data: {
+        userId: result.userId,
+        farmerId: result.farmerId,
+        applicationId: result.applicationId,
+      },
+    });
+  }
+);
+
+/**
  * Get all pending buyer registrations
  */
 export const getPendingBuyerRegistrationsHandler = wrapAsync(
@@ -269,6 +311,45 @@ export const rejectBuyerRegistrationHandler = wrapAsync(
       success: true,
       message: 'Buyer registration rejected',
       data: registration,
+    });
+  }
+);
+
+/**
+ * Create a buyer manually (admin only). Same payload as buyer registration; user is created as ACTIVE.
+ */
+export const createBuyerHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = buyerRegistrationSchema.parse(req.body);
+
+    const createData = {
+      email: validatedData.email.toLowerCase().trim(),
+      phone: validatedData.phone.trim(),
+      password: validatedData.password,
+      fullName: validatedData.fullName.trim(),
+      businessName: validatedData.businessName?.trim(),
+      buyerType: validatedData.buyerType,
+      contactPerson: validatedData.contactPerson.trim(),
+      estimatedVolume: validatedData.estimatedVolume,
+      deliveryAddresses: validatedData.deliveryAddresses.map((addr) => ({
+        address: addr.address.trim(),
+        landmark: addr.landmark?.trim(),
+        region: addr.region?.trim(),
+        isDefault: addr.isDefault,
+      })),
+    };
+
+    const result = await createBuyerAsAdmin(adminId, createData);
+
+    res.status(201).json({
+      success: true,
+      message: 'Buyer added successfully.',
+      data: {
+        userId: result.userId,
+        buyerId: result.buyerId,
+        registrationId: result.registrationId,
+      },
     });
   }
 );

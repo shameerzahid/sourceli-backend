@@ -1,5 +1,40 @@
 import { z } from 'zod';
 import { UserStatus, PerformanceTier } from '@prisma/client';
+import { isValidEmail, isValidPhone, validatePassword } from '../utils/validation.js';
+
+/**
+ * Schema for admin creating a supplier (same as farmer registration but photoUrls optional 0-10, termsAccepted optional)
+ */
+export const createSupplierSchema = z
+  .object({
+    email: z
+      .string()
+      .min(1, 'Email is required')
+      .email('Invalid email format')
+      .refine((val) => isValidEmail(val), { message: 'Invalid email format' }),
+    phone: z
+      .string()
+      .min(1, 'Phone number is required')
+      .refine((val) => isValidPhone(val), { message: 'Invalid phone number format' }),
+    password: z
+      .string()
+      .min(1, 'Password is required')
+      .refine((val) => validatePassword(val).isValid, (val) => ({ message: validatePassword(val).error || 'Invalid password' })),
+    fullName: z.string().min(1, 'Full name is required').max(100, 'Full name is too long'),
+    farmName: z.string().max(100, 'Farm name is too long').optional(),
+    region: z.string().min(1, 'Region is required').max(100, 'Region name is too long'),
+    town: z.string().min(1, 'Town is required').max(100, 'Town name is too long'),
+    weeklyCapacityMin: z.number().int().min(1).max(100000),
+    weeklyCapacityMax: z.number().int().min(1).max(100000),
+    produceCategory: z.string().min(1, 'Produce category is required').max(50),
+    feedingMethod: z.string().min(1, 'Feeding method is required').max(50),
+    termsAccepted: z.boolean().optional(),
+    photoUrls: z.array(z.string().url()).max(10).optional(),
+  })
+  .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
+    message: 'Maximum capacity must be greater than or equal to minimum capacity',
+    path: ['weeklyCapacityMax'],
+  });
 
 /**
  * Schema for approving a farmer application
