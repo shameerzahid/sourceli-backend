@@ -40,6 +40,7 @@ import {
   overridePerformanceHandler,
   getPricingBandsHandler,
   updatePricingBandHandler,
+  createProduceCategoryHandler,
   getAuditLogsHandler,
   getSupportTicketsHandler,
   getSupportTicketByIdHandler,
@@ -108,9 +109,10 @@ router.get('/performance-rules', getPerformanceRulesHandler);
 router.put('/performance-rules', updatePerformanceRulesHandler);
 router.post('/performance/override', overridePerformanceHandler);
 
-// Pricing bands (US-ADMIN-005)
+// Pricing bands (US-ADMIN-005) and produce categories
 router.get('/pricing-bands', getPricingBandsHandler);
 router.put('/pricing-bands', updatePricingBandHandler);
+router.post('/produce-categories', createProduceCategoryHandler);
 
 // Audit logs (reportable, US-SYS-003)
 router.get('/audit-logs', getAuditLogsHandler);

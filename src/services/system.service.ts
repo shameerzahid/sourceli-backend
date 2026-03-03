@@ -1,5 +1,6 @@
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
+import { createError } from '../middleware/errorHandler.js';
 
 /**
  * Get allowed delivery coverage regions (US-BUYER-005).
@@ -35,13 +36,11 @@ export async function getProduceCategories() {
  * Admin only - for future use
  */
 export async function createProduceCategory(data: CreateProduceCategoryData) {
-  // Check if category already exists
   const existing = await prisma.produceCategory.findUnique({
-    where: { name: data.name },
+    where: { name: data.name.trim() },
   });
-
   if (existing) {
-    throw new Error(`Produce category "${data.name}" already exists`);
+    throw createError(`Produce category "${data.name.trim()}" already exists`, 409, 'DUPLICATE_CATEGORY');
   }
 
   const category = await prisma.produceCategory.create({

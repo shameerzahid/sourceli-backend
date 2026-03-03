@@ -176,3 +176,11 @@ export const updatePricingBandSchema = z.object({
   },
   { message: 'Min price must be less than or equal to max price', path: ['maxPrice'] }
 );
+
+/**
+ * Schema for creating a produce category (admin)
+ */
+export const createProduceCategorySchema = z.object({
+  name: z.string().min(1, 'Name is required').max(50, 'Name is too long').transform((s) => s.trim()),
+  unitType: z.string().min(1, 'Unit type is required').max(20, 'Unit type is too long').transform((s) => s.trim()),
+});

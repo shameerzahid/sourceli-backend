@@ -37,6 +37,7 @@ import {
   updatePerformanceRulesSchema,
   overridePerformanceSchema,
   updatePricingBandSchema,
+  createProduceCategorySchema,
   requestOrderModificationSchema,
 } from '../validators/admin.validator.js';
 import { buyerRegistrationSchema } from '../validators/auth.validator.js';
@@ -56,6 +57,7 @@ import {
 import { respondToSupportTicketSchema } from '../validators/supportTicket.validator.js';
 import { createAuditLog, getAuditLogs, getAuditLogsCount } from '../utils/auditLog.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
+import { createProduceCategory } from '../services/system.service.js';
 
 /**
  * Get all pending farmer applications
@@ -761,6 +763,37 @@ export const updatePricingBandHandler = wrapAsync(
     res.json({
       success: true,
       message: 'Pricing band updated',
+      data: category,
+    });
+  }
+);
+
+/**
+ * Create a produce category (admin)
+ * POST /api/admin/produce-categories
+ */
+export const createProduceCategoryHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = createProduceCategorySchema.parse(req.body);
+
+    const category = await createProduceCategory({
+      name: validatedData.name,
+      unitType: validatedData.unitType,
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'PRODUCE_CATEGORY_CREATED',
+      entityType: 'ProduceCategory',
+      entityId: category.id,
+      details: { name: category.name, unitType: category.unitType },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Produce category added.',
       data: category,
     });
   }
