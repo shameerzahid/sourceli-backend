@@ -52,6 +52,14 @@ export async function getPendingFarmerApplications() {
               uploadedAt: true,
             },
           },
+          farmCertificates: {
+            select: {
+              id: true,
+              filePath: true,
+              fileType: true,
+              uploadedAt: true,
+            },
+          },
         },
       },
     },
@@ -84,6 +92,14 @@ export async function getFarmerApplicationById(applicationId: string) {
             },
           },
           farmPhotos: {
+            select: {
+              id: true,
+              filePath: true,
+              fileType: true,
+              uploadedAt: true,
+            },
+          },
+          farmCertificates: {
             select: {
               id: true,
               filePath: true,
@@ -259,6 +275,15 @@ export async function getPendingBuyerRegistrations() {
               createdAt: true,
             },
           },
+          buyerDocuments: {
+            select: {
+              id: true,
+              filePath: true,
+              fileType: true,
+              documentType: true,
+              uploadedAt: true,
+            },
+          },
         },
       },
     },
@@ -297,6 +322,15 @@ export async function getBuyerRegistrationById(registrationId: string) {
               landmark: true,
               isDefault: true,
               createdAt: true,
+            },
+          },
+          buyerDocuments: {
+            select: {
+              id: true,
+              filePath: true,
+              fileType: true,
+              documentType: true,
+              uploadedAt: true,
             },
           },
         },
@@ -452,6 +486,7 @@ export interface CreateSupplierAsAdminData {
   feedingMethod: string;
   termsAccepted?: boolean;
   photoUrls?: string[];
+  certificateUrls?: string[];
 }
 
 /**
@@ -549,6 +584,16 @@ export async function createSupplierAsAdmin(
       });
     }
 
+    if (data.certificateUrls && data.certificateUrls.length > 0) {
+      await tx.farmCertificate.createMany({
+        data: data.certificateUrls.map((url) => ({
+          farmerId: farmer.id,
+          filePath: url,
+          fileType: 'image',
+        })),
+      });
+    }
+
     return {
       userId: user.id,
       farmerId: farmer.id,
@@ -576,6 +621,9 @@ export interface CreateBuyerAsAdminData {
   buyerType: 'RESTAURANT' | 'HOTEL' | 'CATERER' | 'INDIVIDUAL';
   contactPerson: string;
   estimatedVolume?: number;
+  orderFrequency?: string;
+  companyRegistrationUrls?: string[];
+  supportingDocUrls?: string[];
   deliveryAddresses: {
     address: string;
     landmark?: string;
@@ -633,6 +681,7 @@ export async function createBuyerAsAdmin(
         buyerType: data.buyerType,
         contactPerson: data.contactPerson,
         estimatedVolume: data.estimatedVolume,
+        orderFrequency: data.orderFrequency,
         verificationDate: new Date(),
         verificationAdminId: adminId,
       },
@@ -675,6 +724,27 @@ export async function createBuyerAsAdmin(
           landmark: addr.landmark,
           region: addr.region?.trim() || null,
           isDefault: addr.isDefault ?? (index === 0),
+        })),
+      });
+    }
+
+    if (data.companyRegistrationUrls && data.companyRegistrationUrls.length > 0) {
+      await tx.buyerDocument.createMany({
+        data: data.companyRegistrationUrls.map((url) => ({
+          buyerId: buyer.id,
+          filePath: url,
+          fileType: 'image',
+          documentType: 'COMPANY_REGISTRATION',
+        })),
+      });
+    }
+    if (data.supportingDocUrls && data.supportingDocUrls.length > 0) {
+      await tx.buyerDocument.createMany({
+        data: data.supportingDocUrls.map((url) => ({
+          buyerId: buyer.id,
+          filePath: url,
+          fileType: 'image',
+          documentType: 'SUPPORTING',
         })),
       });
     }
@@ -786,6 +856,14 @@ export async function getAllBuyers(filters?: {
           status: true,
           submittedAt: true,
           reviewedAt: true,
+        },
+      },
+      deliveryAddresses: {
+        select: {
+          id: true,
+          address: true,
+          landmark: true,
+          isDefault: true,
         },
       },
     },

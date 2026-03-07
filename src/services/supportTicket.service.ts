@@ -133,3 +133,80 @@ export async function respondToSupportTicket(
 
   return updated;
 }
+
+export interface UpdateSupportTicketData {
+  status?: TicketStatus;
+  adminResponse?: string;
+}
+
+/**
+ * Admin update a support ticket (status and/or response). At least one field required.
+ * Used for edit response, close/cancel, escalate.
+ */
+export async function updateSupportTicket(
+  ticketId: string,
+  adminId: string,
+  data: UpdateSupportTicketData
+) {
+  const ticket = await prisma.supportTicket.findUnique({
+    where: { id: ticketId },
+  });
+
+  if (!ticket) {
+    throw createError('Support ticket not found', 404, 'TICKET_NOT_FOUND');
+  }
+
+  const updateData: Record<string, unknown> = {};
+  if (data.status !== undefined) updateData.status = data.status;
+  if (data.adminResponse !== undefined) {
+    updateData.adminResponse = data.adminResponse.trim();
+    updateData.adminRespondedBy = adminId;
+    updateData.adminRespondedAt = new Date();
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    throw createError('At least one of status or adminResponse is required', 400, 'VALIDATION_ERROR');
+  }
+
+  return prisma.supportTicket.update({
+    where: { id: ticketId },
+    data: updateData,
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Admin create a support ticket on behalf of a user.
+ */
+export async function createSupportTicketByAdmin(
+  userId: string,
+  data: CreateSupportTicketData
+) {
+  return prisma.supportTicket.create({
+    data: {
+      userId,
+      subject: data.subject.trim(),
+      message: data.message.trim(),
+      status: TicketStatus.OPEN,
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      },
+    },
+  });
+}

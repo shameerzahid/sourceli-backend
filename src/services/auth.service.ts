@@ -25,6 +25,7 @@ export interface FarmerRegistrationData {
   feedingMethod: string;
   termsAccepted: boolean; // Platform rules agreement
   photoUrls?: string[]; // Cloudinary URLs for farm photos
+  certificateUrls?: string[]; // Cloudinary URLs for farm certificates
 }
 
 export interface BuyerRegistrationData {
@@ -36,12 +37,15 @@ export interface BuyerRegistrationData {
   buyerType: BuyerType;
   contactPerson: string;
   estimatedVolume?: number;
+  orderFrequency?: string;
   deliveryAddresses: {
     address: string;
     landmark?: string;
     region?: string;
     isDefault?: boolean;
   }[];
+  companyRegistrationUrls?: string[];
+  supportingDocUrls?: string[];
 }
 
 // Login DTOs
@@ -135,8 +139,19 @@ export async function registerFarmer(
       await tx.farmPhoto.createMany({
         data: data.photoUrls.map((url) => ({
           farmerId: farmer.id,
-          filePath: url, // Store Cloudinary URL
-          fileType: 'image', // Can be enhanced to detect actual type
+          filePath: url,
+          fileType: 'image',
+        })),
+      });
+    }
+
+    // Create farm certificates if provided
+    if (data.certificateUrls && data.certificateUrls.length > 0) {
+      await tx.farmCertificate.createMany({
+        data: data.certificateUrls.map((url) => ({
+          farmerId: farmer.id,
+          filePath: url,
+          fileType: 'image',
         })),
       });
     }
@@ -198,6 +213,7 @@ export async function registerBuyer(
         buyerType: data.buyerType,
         contactPerson: data.contactPerson,
         estimatedVolume: data.estimatedVolume,
+        orderFrequency: data.orderFrequency,
       },
     });
 
@@ -239,6 +255,27 @@ export async function registerBuyer(
           landmark: addr.landmark,
           region: addr.region?.trim() || null,
           isDefault: addr.isDefault ?? (index === 0),
+        })),
+      });
+    }
+
+    if (data.companyRegistrationUrls && data.companyRegistrationUrls.length > 0) {
+      await tx.buyerDocument.createMany({
+        data: data.companyRegistrationUrls.map((url) => ({
+          buyerId: buyer.id,
+          filePath: url,
+          fileType: 'image',
+          documentType: 'COMPANY_REGISTRATION',
+        })),
+      });
+    }
+    if (data.supportingDocUrls && data.supportingDocUrls.length > 0) {
+      await tx.buyerDocument.createMany({
+        data: data.supportingDocUrls.map((url) => ({
+          buyerId: buyer.id,
+          filePath: url,
+          fileType: 'image',
+          documentType: 'SUPPORTING',
         })),
       });
     }

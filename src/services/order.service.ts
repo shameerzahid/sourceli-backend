@@ -222,6 +222,14 @@ export async function getPendingOrders() {
               status: true,
             },
           },
+          deliveryAddresses: {
+            select: {
+              id: true,
+              address: true,
+              landmark: true,
+              isDefault: true,
+            },
+          },
         },
       },
       deliveryAddress: true,
@@ -432,5 +440,212 @@ export async function requestOrderModification(
   ).catch((err) => console.error('[Notification]', err));
 
   return updated;
+}
+
+export interface CreateOrderByAdminData {
+  buyerId: string;
+  productType: string;
+  quantity: number;
+  orderType: OrderType;
+  deliveryDate: Date;
+  deliveryAddressId: string;
+  notes?: string;
+}
+
+/**
+ * Create an order on behalf of a buyer (admin only)
+ */
+export async function createOrderByAdmin(_adminId: string, data: CreateOrderByAdminData) {
+  const buyer = await prisma.buyer.findUnique({
+    where: { id: data.buyerId },
+    include: { user: true },
+  });
+
+  if (!buyer) {
+    throw createError('Buyer not found', 404, 'BUYER_NOT_FOUND');
+  }
+
+  if (buyer.user.status !== UserStatus.ACTIVE) {
+    throw createError('Buyer account is not active', 400, 'BUYER_NOT_ACTIVE');
+  }
+
+  const address = await prisma.deliveryAddress.findFirst({
+    where: {
+      id: data.deliveryAddressId,
+      buyerId: data.buyerId,
+    },
+  });
+
+  if (!address) {
+    throw createError(
+      'Delivery address not found or does not belong to this buyer',
+      404,
+      'ADDRESS_NOT_FOUND'
+    );
+  }
+
+  if (data.quantity <= 0) {
+    throw createError('Quantity must be greater than 0', 400, 'INVALID_QUANTITY');
+  }
+
+  const deliveryDate = new Date(data.deliveryDate);
+  if (isNaN(deliveryDate.getTime())) {
+    throw createError('Invalid delivery date', 400, 'INVALID_DELIVERY_DATE');
+  }
+
+  const order = await prisma.order.create({
+    data: {
+      buyerId: data.buyerId,
+      productType: data.productType.trim(),
+      quantity: data.quantity,
+      orderType: data.orderType,
+      deliveryDate,
+      deliveryAddressId: data.deliveryAddressId,
+      status: OrderStatus.PENDING,
+      notes: data.notes?.trim(),
+    },
+    include: {
+      deliveryAddress: true,
+      buyer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return order;
+}
+
+export interface UpdateOrderByAdminData {
+  productType?: string;
+  quantity?: number;
+  deliveryDate?: Date;
+  deliveryAddressId?: string;
+  notes?: string;
+}
+
+/**
+ * Update an order (admin only). Only PENDING or PENDING_MODIFICATION orders can be updated.
+ */
+export async function updateOrderByAdmin(
+  orderId: string,
+  adminId: string,
+  data: UpdateOrderByAdminData
+) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { buyer: true },
+  });
+
+  if (!order) {
+    throw createError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
+
+  if (
+    order.status !== OrderStatus.PENDING &&
+    order.status !== OrderStatus.PENDING_MODIFICATION
+  ) {
+    throw createError(
+      `Cannot update order with status: ${order.status}. Only PENDING or PENDING_MODIFICATION orders can be updated.`,
+      400,
+      'INVALID_ORDER_STATUS'
+    );
+  }
+
+  const updateData: Record<string, unknown> = {};
+
+  if (data.productType !== undefined) {
+    updateData.productType = data.productType.trim();
+  }
+  if (data.quantity !== undefined) {
+    if (data.quantity <= 0) {
+      throw createError('Quantity must be greater than 0', 400, 'INVALID_QUANTITY');
+    }
+    updateData.quantity = data.quantity;
+  }
+  if (data.deliveryDate !== undefined) {
+    const d = new Date(data.deliveryDate);
+    if (isNaN(d.getTime())) {
+      throw createError('Invalid delivery date', 400, 'INVALID_DELIVERY_DATE');
+    }
+    updateData.deliveryDate = d;
+  }
+  if (data.deliveryAddressId !== undefined) {
+    const address = await prisma.deliveryAddress.findFirst({
+      where: {
+        id: data.deliveryAddressId,
+        buyerId: order.buyerId,
+      },
+    });
+    if (!address) {
+      throw createError(
+        'Delivery address not found or does not belong to this buyer',
+        404,
+        'ADDRESS_NOT_FOUND'
+      );
+    }
+    updateData.deliveryAddressId = data.deliveryAddressId;
+  }
+  if (data.notes !== undefined) {
+    updateData.notes = data.notes?.trim() || null;
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: updateData as any,
+    include: {
+      buyer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+              status: true,
+            },
+          },
+        },
+      },
+      deliveryAddress: true,
+    },
+  });
+
+  return updated;
+}
+
+/**
+ * Delete an order (admin only). Only PENDING or PENDING_MODIFICATION orders can be deleted.
+ */
+export async function deleteOrderByAdmin(orderId: string, _adminId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { assignments: true },
+  });
+
+  if (!order) {
+    throw createError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
+
+  if (
+    order.status !== OrderStatus.PENDING &&
+    order.status !== OrderStatus.PENDING_MODIFICATION
+  ) {
+    throw createError(
+      `Cannot delete order with status: ${order.status}. Only PENDING or PENDING_MODIFICATION orders can be deleted.`,
+      400,
+      'INVALID_ORDER_STATUS'
+    );
+  }
+
+  await prisma.order.delete({
+    where: { id: orderId },
+  });
+
+  return { deleted: true, orderId };
 }
 

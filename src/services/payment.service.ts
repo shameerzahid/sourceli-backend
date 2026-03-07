@@ -271,4 +271,120 @@ export async function getOutstandingBalance(farmerId: string) {
   return await calculateAmountOwed(farmerId);
 }
 
+export interface UpdatePaymentData {
+  amountPaid?: number;
+  paymentMethod?: PaymentMethod;
+  paymentDate?: Date;
+  notes?: string | null;
+}
 
+/**
+ * Get a single payment by ID (admin)
+ */
+export async function getPaymentById(paymentId: string) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      farmer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      assignment: {
+        include: {
+          order: {
+            select: {
+              id: true,
+              productType: true,
+              quantity: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!payment) {
+    throw createError('Payment not found', 404, 'PAYMENT_NOT_FOUND');
+  }
+  return payment;
+}
+
+/**
+ * Update a payment record (admin only)
+ */
+export async function updatePayment(
+  paymentId: string,
+  _adminId: string,
+  data: UpdatePaymentData
+) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+  });
+
+  if (!payment) {
+    throw createError('Payment not found', 404, 'PAYMENT_NOT_FOUND');
+  }
+
+  if (data.amountPaid !== undefined && data.amountPaid <= 0) {
+    throw createError('Amount paid must be greater than 0', 400, 'INVALID_AMOUNT');
+  }
+
+  const updated = await prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      ...(data.amountPaid !== undefined && { amountPaid: data.amountPaid }),
+      ...(data.paymentMethod !== undefined && { paymentMethod: data.paymentMethod }),
+      ...(data.paymentDate !== undefined && { paymentDate: data.paymentDate }),
+      ...(data.notes !== undefined && { notes: data.notes }),
+    },
+    include: {
+      farmer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      assignment: {
+        include: {
+          order: {
+            select: {
+              id: true,
+              productType: true,
+              quantity: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return updated;
+}
+
+/**
+ * Delete a payment record (admin only)
+ */
+export async function deletePayment(paymentId: string) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+  });
+
+  if (!payment) {
+    throw createError('Payment not found', 404, 'PAYMENT_NOT_FOUND');
+  }
+
+  await prisma.payment.delete({
+    where: { id: paymentId },
+  });
+
+  return { deleted: true, paymentId };
+}

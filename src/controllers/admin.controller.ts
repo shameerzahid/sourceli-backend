@@ -24,6 +24,9 @@ import {
   approveOrder,
   rejectOrder,
   requestOrderModification,
+  createOrderByAdmin,
+  updateOrderByAdmin,
+  deleteOrderByAdmin,
 } from '../services/order.service.js';
 import {
   approveFarmerSchema,
@@ -39,6 +42,8 @@ import {
   updatePricingBandSchema,
   createProduceCategorySchema,
   requestOrderModificationSchema,
+  createOrderByAdminSchema,
+  updateOrderByAdminSchema,
 } from '../validators/admin.validator.js';
 import { buyerRegistrationSchema } from '../validators/auth.validator.js';
 import { createSupplierSchema } from '../validators/admin.validator.js';
@@ -48,14 +53,20 @@ import {
   updatePerformanceRules,
   type PerformanceRulesData,
 } from '../services/performanceRules.service.js';
-import { overridePerformanceScore } from '../services/performance.service.js';
+import { overridePerformanceScore, getPerformanceData, getPerformanceHistory } from '../services/performance.service.js';
 import {
   listAllSupportTickets,
   getSupportTicketByIdForAdmin,
   respondToSupportTicket,
+  updateSupportTicket,
+  createSupportTicketByAdmin,
 } from '../services/supportTicket.service.js';
-import { respondToSupportTicketSchema } from '../validators/supportTicket.validator.js';
-import { createAuditLog, getAuditLogs, getAuditLogsCount } from '../utils/auditLog.js';
+import {
+  respondToSupportTicketSchema,
+  updateSupportTicketSchema,
+  createSupportTicketByAdminSchema,
+} from '../validators/supportTicket.validator.js';
+import { createAuditLog, getAuditLogs, getAuditLogsCount, getAuditLogById, updateAuditLog, createAuditLogEntry } from '../utils/auditLog.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { createProduceCategory } from '../services/system.service.js';
 
@@ -191,6 +202,7 @@ export const createSupplierHandler = wrapAsync(
       feedingMethod: validatedData.feedingMethod.trim(),
       termsAccepted: validatedData.termsAccepted ?? true,
       photoUrls: validatedData.photoUrls,
+      certificateUrls: validatedData.certificateUrls,
     };
 
     const result = await createSupplierAsAdmin(adminId, createData);
@@ -334,6 +346,9 @@ export const createBuyerHandler = wrapAsync(
       buyerType: validatedData.buyerType,
       contactPerson: validatedData.contactPerson.trim(),
       estimatedVolume: validatedData.estimatedVolume,
+      orderFrequency: validatedData.orderFrequency,
+      companyRegistrationUrls: validatedData.companyRegistrationUrls,
+      supportingDocUrls: validatedData.supportingDocUrls,
       deliveryAddresses: validatedData.deliveryAddresses.map((addr) => ({
         address: addr.address.trim(),
         landmark: addr.landmark?.trim(),
@@ -617,6 +632,124 @@ export const requestOrderModificationHandler = wrapAsync(
   }
 );
 
+/**
+ * Create an order on behalf of a buyer (admin only)
+ * POST /api/admin/orders
+ */
+export const createOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = createOrderByAdminSchema.parse(req.body);
+
+    const order = await createOrderByAdmin(adminId, {
+      buyerId: validatedData.buyerId,
+      productType: validatedData.productType,
+      quantity: validatedData.quantity,
+      orderType: validatedData.orderType as 'ONE_TIME' | 'STANDING',
+      deliveryDate: validatedData.deliveryDate,
+      deliveryAddressId: validatedData.deliveryAddressId,
+      notes: validatedData.notes,
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'ORDER_CREATED',
+      entityType: 'Order',
+      entityId: order.id,
+      details: {
+        orderId: order.id,
+        buyerId: order.buyerId,
+        productType: order.productType,
+        quantity: order.quantity,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Order created successfully',
+      data: order,
+    });
+  }
+);
+
+/**
+ * Update an order (admin only). Only PENDING or PENDING_MODIFICATION.
+ * PATCH /api/admin/orders/:id
+ */
+export const updateOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.userId;
+    const body = req.body as Record<string, unknown>;
+    const updateData: Record<string, unknown> = {};
+    if (body.productType !== undefined) updateData.productType = body.productType;
+    if (body.quantity !== undefined) updateData.quantity = body.quantity;
+    if (body.deliveryDate !== undefined) updateData.deliveryDate = body.deliveryDate;
+    if (body.deliveryAddressId !== undefined) updateData.deliveryAddressId = body.deliveryAddressId;
+    if (body.notes !== undefined) updateData.notes = body.notes;
+
+    const validatedData = updateOrderByAdminSchema.parse(updateData);
+
+    const order = await updateOrderByAdmin(id, adminId, {
+      productType: validatedData.productType,
+      quantity: validatedData.quantity,
+      deliveryDate: validatedData.deliveryDate,
+      deliveryAddressId: validatedData.deliveryAddressId,
+      notes: validatedData.notes ?? undefined,
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'ORDER_UPDATED',
+      entityType: 'Order',
+      entityId: id,
+      details: {
+        orderId: id,
+        buyerId: order.buyerId,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Order updated successfully',
+      data: order,
+    });
+  }
+);
+
+/**
+ * Delete an order (admin only). Only PENDING or PENDING_MODIFICATION.
+ * DELETE /api/admin/orders/:id
+ */
+export const deleteOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user!.userId;
+
+    const result = await deleteOrderByAdmin(id, adminId);
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'ORDER_DELETED',
+      entityType: 'Order',
+      entityId: id,
+      details: {
+        ...result,
+        orderId: id,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Order deleted successfully',
+      data: result,
+    });
+  }
+);
+
 // --- Performance rules (US-ADMIN-006) ---
 
 /**
@@ -676,6 +809,22 @@ export const updatePerformanceRulesHandler = wrapAsync(
         warningTriggers: rule.warningTriggers,
         effectiveFrom: rule.effectiveFrom,
       },
+    });
+  }
+);
+
+/**
+ * Get performance data for a farmer (admin review)
+ * GET /api/admin/performance/:farmerId
+ */
+export const getPerformanceByFarmerIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { farmerId } = req.params;
+    const { performance, breakdown } = await getPerformanceData(farmerId);
+    const history = await getPerformanceHistory(farmerId, 90);
+    res.json({
+      success: true,
+      data: { performance, breakdown, history },
     });
   }
 );
@@ -857,6 +1006,88 @@ export const getAuditLogsHandler = wrapAsync(
   }
 );
 
+/**
+ * Get single audit log by ID. GET /api/admin/audit-logs/:id
+ */
+export const getAuditLogByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const log = await getAuditLogById(id);
+    if (!log) {
+      res.status(404).json({ success: false, message: 'Audit log not found' });
+      return;
+    }
+    res.json({
+      success: true,
+      data: {
+        ...log,
+        timestamp: log.timestamp.toISOString(),
+      },
+    });
+  }
+);
+
+/**
+ * Update audit log details (admin correction). PATCH /api/admin/audit-logs/:id
+ * Body: { details: Record<string, unknown> }
+ */
+export const updateAuditLogHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const { details } = req.body as { details?: Record<string, unknown> };
+    if (!details || typeof details !== 'object') {
+      res.status(400).json({ success: false, message: 'details object required' });
+      return;
+    }
+    const log = await updateAuditLog(id, { details });
+    res.json({
+      success: true,
+      data: {
+        ...log,
+        timestamp: log.timestamp.toISOString(),
+      },
+    });
+  }
+);
+
+/**
+ * Create audit log entry manually (admin). POST /api/admin/audit-logs
+ * Body: { actionType, entityType, entityId?, details }
+ */
+export const createAuditLogManualHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user?.userId;
+    const { actionType, entityType, entityId, details } = req.body as {
+      actionType?: string;
+      entityType?: string;
+      entityId?: string;
+      details?: Record<string, unknown>;
+    };
+    if (!actionType || !entityType) {
+      res.status(400).json({ success: false, message: 'actionType and entityType required' });
+      return;
+    }
+    if (!details || typeof details !== 'object') {
+      res.status(400).json({ success: false, message: 'details object required' });
+      return;
+    }
+    const log = await createAuditLogEntry({
+      userId: adminId || undefined,
+      actionType,
+      entityType,
+      entityId: entityId || undefined,
+      details,
+    });
+    res.status(201).json({
+      success: true,
+      data: {
+        ...log,
+        timestamp: log.timestamp.toISOString(),
+      },
+    });
+  }
+);
+
 // --- Support tickets ---
 
 /**
@@ -920,6 +1151,68 @@ export const respondToSupportTicketHandler = wrapAsync(
     res.json({
       success: true,
       message: 'Response saved.',
+      data: ticket,
+    });
+  }
+);
+
+/**
+ * Admin update support ticket (edit response, close, escalate)
+ * PATCH /api/admin/support-tickets/:id
+ * Body: { status?, adminResponse? } — at least one required
+ */
+export const updateSupportTicketHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const { id } = req.params;
+    const validatedData = updateSupportTicketSchema.parse(req.body);
+
+    const ticket = await updateSupportTicket(id, adminId, validatedData);
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'SUPPORT_TICKET_UPDATED',
+      entityType: 'SupportTicket',
+      entityId: ticket.id,
+      details: { status: ticket.status },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Ticket updated.',
+      data: ticket,
+    });
+  }
+);
+
+/**
+ * Admin create support ticket on behalf of a user
+ * POST /api/admin/support-tickets
+ * Body: { userId, subject, message }
+ */
+export const createSupportTicketByAdminHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const validatedData = createSupportTicketByAdminSchema.parse(req.body);
+
+    const ticket = await createSupportTicketByAdmin(validatedData.userId, {
+      subject: validatedData.subject,
+      message: validatedData.message,
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'SUPPORT_TICKET_CREATED_BY_ADMIN',
+      entityType: 'SupportTicket',
+      entityId: ticket.id,
+      details: { userId: validatedData.userId },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Ticket created.',
       data: ticket,
     });
   }

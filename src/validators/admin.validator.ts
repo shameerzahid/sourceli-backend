@@ -30,6 +30,7 @@ export const createSupplierSchema = z
     feedingMethod: z.string().min(1, 'Feeding method is required').max(50),
     termsAccepted: z.boolean().optional(),
     photoUrls: z.array(z.string().url()).max(10).optional(),
+    certificateUrls: z.array(z.string().url()).max(10).optional(),
   })
   .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
     message: 'Maximum capacity must be greater than or equal to minimum capacity',
@@ -160,6 +161,30 @@ export const requestOrderModificationSchema = z.object({
     .min(1, 'Message to buyer is required')
     .max(500, 'Message must be at most 500 characters')
     .transform((s) => s.trim()),
+});
+
+/**
+ * Schema for admin creating an order on behalf of a buyer
+ */
+export const createOrderByAdminSchema = z.object({
+  buyerId: z.string().min(1, 'Buyer is required'),
+  productType: z.string().min(1, 'Product type is required').max(100).transform((s) => s.trim()),
+  quantity: z.number().int().min(1, 'Quantity must be at least 1').max(1000000),
+  orderType: z.enum(['ONE_TIME', 'STANDING'], { required_error: 'Order type is required' }),
+  deliveryDate: z.string().min(1, 'Delivery date is required').transform((s) => new Date(s)),
+  deliveryAddressId: z.string().min(1, 'Delivery address is required'),
+  notes: z.string().max(1000).optional().transform((s) => (s == null || s === '' ? undefined : s.trim())),
+});
+
+/**
+ * Schema for admin updating an order (partial)
+ */
+export const updateOrderByAdminSchema = z.object({
+  productType: z.string().min(1).max(100).transform((s) => s.trim()).optional(),
+  quantity: z.number().int().min(1).max(1000000).optional(),
+  deliveryDate: z.string().min(1).transform((s) => new Date(s)).optional(),
+  deliveryAddressId: z.string().min(1).optional(),
+  notes: z.string().max(1000).optional().transform((s) => (s == null || s === '' ? null : s.trim())),
 });
 
 /**

@@ -4,18 +4,18 @@ import { Request } from 'express';
 // Configure multer to store files in memory (for Cloudinary upload)
 const storage = multer.memoryStorage();
 
-// File filter - only allow images
+// File filter - allow images and PDF (farm photos/certificates and buyer docs may be PDF)
 const fileFilter = (
   req: Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ): void => {
-  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
   
   if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.'));
+    cb(new Error('Invalid file type. Only JPEG, PNG, WebP images and PDF are allowed.'));
   }
 };
 

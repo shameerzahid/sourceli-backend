@@ -7,11 +7,14 @@ import {
   deleteAssignment,
   confirmDelivery,
   getAllDeliveryAssignments,
+  getDeliveryAssignmentById,
+  createDeliveryAssignmentByAdmin,
   type ConfirmDeliveryData,
 } from '../services/allocation.service.js';
 import {
   createAllocationSchema,
   updateAssignmentSchema,
+  createDeliveryByAdminSchema,
 } from '../validators/allocation.validator.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { createAuditLog } from '../utils/auditLog.js';
@@ -181,6 +184,69 @@ export const getAllDeliveryAssignmentsHandler = wrapAsync(
     res.status(200).json({
       success: true,
       data: assignments,
+    });
+  }
+);
+
+/**
+ * Get a single delivery assignment by ID (for admin review)
+ * GET /api/admin/deliveries/:id
+ */
+export const getDeliveryAssignmentByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const assignment = await getDeliveryAssignmentById(id);
+
+    res.status(200).json({
+      success: true,
+      data: assignment,
+    });
+  }
+);
+
+/**
+ * Create a single delivery assignment (manual Add New Delivery)
+ * POST /api/admin/deliveries
+ */
+export const createDeliveryByAdminHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const validatedData = createDeliveryByAdminSchema.parse(req.body);
+    const assignment = await createDeliveryAssignmentByAdmin(req.user.userId, validatedData);
+
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'DELIVERY_ASSIGNMENT_CREATED',
+      entityType: 'DeliveryAssignment',
+      entityId: assignment.id,
+      details: {
+        orderId: assignment.orderId,
+        farmerId: assignment.farmerId,
+        assignedQuantity: assignment.assignedQuantity,
+        deliveryDate: assignment.deliveryDate,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Delivery created successfully',
+      data: assignment,
     });
   }
 );

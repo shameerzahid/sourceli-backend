@@ -127,6 +127,70 @@ export async function getAuditLogsCount(filters?: {
   return prisma.auditLog.count({ where });
 }
 
+/**
+ * Get a single audit log by ID (for admin review)
+ */
+export async function getAuditLogById(id: string) {
+  return prisma.auditLog.findUnique({
+    where: { id },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  });
+}
 
+/**
+ * Update an audit log (admin only). Only details can be updated (e.g. correction/note).
+ */
+export async function updateAuditLog(
+  id: string,
+  data: { details: Record<string, any> }
+) {
+  return prisma.auditLog.update({
+    where: { id },
+    data: { details: data.details },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Create an audit log entry and return it (admin manual entry). Uses provided userId (e.g. current admin).
+ */
+export async function createAuditLogEntry(data: AuditLogData) {
+  return prisma.auditLog.create({
+    data: {
+      userId: data.userId || null,
+      actionType: data.actionType,
+      entityType: data.entityType,
+      entityId: data.entityId || null,
+      details: data.details,
+      ipAddress: data.ipAddress || null,
+      timestamp: new Date(),
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  });
+}
 
 

@@ -27,7 +27,7 @@ import {
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { prisma } from '../config/database.js';
 import { UserRole } from '@prisma/client';
-import { uploadImageToCloudinary, validateImageFile } from '../utils/fileUpload.js';
+import { uploadImageToCloudinary, validateImageFile, validateImageOrPdfFile, uploadImageOrPdfToCloudinary } from '../utils/fileUpload.js';
 import { createError } from '../middleware/errorHandler.js';
 
 /**
@@ -39,13 +39,15 @@ export const uploadFarmPhotoHandler = wrapAsync(
   async (req: AuthRequest, res: Response): Promise<void> => {
     const file = req.file;
     if (!file) {
-      throw createError('No photo file provided. Send one image as multipart field "photo".', 400, 'PHOTO_REQUIRED');
+      throw createError('No file provided. Send one image or PDF as multipart field "photo".', 400, 'PHOTO_REQUIRED');
     }
-    validateImageFile(file);
-    const uploadResult = await uploadImageToCloudinary(
+    validateImageOrPdfFile(file);
+    const fileName = `farmer-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const uploadResult = await uploadImageOrPdfToCloudinary(
       file.buffer,
       'farm-photos',
-      `farmer-${Date.now()}-${Math.random().toString(36).substring(7)}`
+      fileName,
+      file.mimetype
     );
     res.status(200).json({
       success: true,
@@ -120,11 +122,13 @@ export const registerFarmerHandler = wrapAsync(
     // Otherwise upload from multipart files
     if (photoUrls.length === 0 && files && files.length > 0) {
       for (const file of files) {
-        validateImageFile(file);
-        const uploadResult = await uploadImageToCloudinary(
+        validateImageOrPdfFile(file);
+        const fileName = `farmer-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const uploadResult = await uploadImageOrPdfToCloudinary(
           file.buffer,
           'farm-photos',
-          `farmer-${Date.now()}-${Math.random().toString(36).substring(7)}`
+          fileName,
+          file.mimetype
         );
         photoUrls.push(uploadResult.secureUrl);
       }
@@ -137,6 +141,10 @@ export const registerFarmerHandler = wrapAsync(
         'PHOTOS_REQUIRED'
       );
     }
+
+    const certificateUrls = Array.isArray(validatedData.certificateUrls)
+      ? validatedData.certificateUrls
+      : [];
 
     // Convert to service format
     const registrationData: FarmerRegistrationData = {
@@ -153,6 +161,7 @@ export const registerFarmerHandler = wrapAsync(
       feedingMethod: validatedData.feedingMethod.trim(),
       termsAccepted: validatedData.termsAccepted,
       photoUrls,
+      certificateUrls: certificateUrls.length > 0 ? certificateUrls : undefined,
     };
 
     // Register farmer
@@ -189,6 +198,9 @@ export const registerBuyerHandler = wrapAsync(
       buyerType: validatedData.buyerType,
       contactPerson: validatedData.contactPerson.trim(),
       estimatedVolume: validatedData.estimatedVolume,
+      orderFrequency: validatedData.orderFrequency,
+      companyRegistrationUrls: validatedData.companyRegistrationUrls,
+      supportingDocUrls: validatedData.supportingDocUrls,
       deliveryAddresses: validatedData.deliveryAddresses.map((addr) => ({
         address: addr.address.trim(),
         landmark: addr.landmark?.trim(),

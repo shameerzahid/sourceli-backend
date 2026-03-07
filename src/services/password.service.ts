@@ -1,7 +1,10 @@
 import { prisma } from '../config/database.js';
+import { env } from '../config/env.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { createError } from '../middleware/errorHandler.js';
 import { toE164, isValidPhone } from '../utils/validation.js';
+import { sendEmail } from './notificationDelivery.service.js';
+import { getEmailHtml } from '../templates/emailTemplate.js';
 import * as crypto from 'crypto';
 
 // Password reset token storage (in production, use Redis or database)
@@ -64,10 +67,16 @@ export async function generatePasswordResetToken(
     expiresAt,
   });
 
-  // In production, you would:
-  // 1. Store token in database with expiration
-  // 2. Send reset link via email/SMS
-  // 3. Include token in the link
+  // Send reset link via email when user has email and SendGrid is configured
+  if (user.email && env.SENDGRID_API_KEY && env.SENDGRID_FROM_EMAIL) {
+    const resetLink = `${env.CORS_ORIGIN}/reset-password?token=${token}`;
+    const subject = 'Reset your Sourceli password';
+    const text = `You requested a password reset. Click the link below to set a new password (link expires in 1 hour):\n\n${resetLink}\n\nIf you didn't request this, you can ignore this email.`;
+    const html = getEmailHtml(subject, text.replace(/\n/g, '\n\n'));
+    sendEmail(user.email, subject, text, html).catch((err) =>
+      console.error('[Password reset] Email send failed:', err)
+    );
+  }
 
   return token;
 }

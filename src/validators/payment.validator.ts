@@ -45,7 +45,25 @@ export const paymentReportFiltersSchema = z.object({
   paymentStatus: z.enum(['NOT_PAID', 'PARTIALLY_PAID', 'PAID']).optional(),
 });
 
+/**
+ * Update payment schema (admin only)
+ */
+export const updatePaymentSchema = z.object({
+  amountPaid: z.number().positive('Amount must be greater than 0').optional(),
+  paymentMethod: z.nativeEnum(PaymentMethod, {
+    errorMap: () => ({ message: 'Invalid payment method' }),
+  }).optional(),
+  paymentDate: z
+    .string()
+    .datetime()
+    .or(z.date())
+    .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+    .optional(),
+  notes: z.string().max(500).trim().optional().nullable(),
+});
+
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
+export type UpdatePaymentInput = z.infer<typeof updatePaymentSchema>;
 export type PaymentReportFiltersInput = z.infer<typeof paymentReportFiltersSchema>;
 
 

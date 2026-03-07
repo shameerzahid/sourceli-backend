@@ -31,6 +31,21 @@ export const updateAssignmentSchema = z.object({
     .positive('Assigned quantity must be greater than 0'),
 });
 
+/**
+ * Create delivery by admin (manual Add New Delivery)
+ */
+export const createDeliveryByAdminSchema = z.object({
+  orderId: z.string().min(1, 'Order ID is required'),
+  farmerId: z.string().min(1, 'Farmer ID is required'),
+  assignedQuantity: z
+    .number()
+    .int('Assigned quantity must be a whole number')
+    .positive('Assigned quantity must be greater than 0'),
+  deliveryDate: z.string().optional(),
+});
+
+export type CreateDeliveryByAdminInput = z.infer<typeof createDeliveryByAdminSchema>;
+
 export type AllocationAssignmentInput = z.infer<typeof allocationAssignmentSchema>;
 export type CreateAllocationInput = z.infer<typeof createAllocationSchema>;
 export type UpdateAssignmentInput = z.infer<typeof updateAssignmentSchema>;

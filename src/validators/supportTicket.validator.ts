@@ -27,5 +27,38 @@ export const respondToSupportTicketSchema = z.object({
     .optional(),
 });
 
+export const updateSupportTicketSchema = z
+  .object({
+    status: z
+      .nativeEnum(TicketStatus, {
+        errorMap: () => ({ message: 'Status must be OPEN, IN_PROGRESS, or RESOLVED' }),
+      })
+      .optional(),
+    adminResponse: z
+      .string()
+      .max(2000, 'Response is too long')
+      .trim()
+      .optional(),
+  })
+  .refine((data) => data.status !== undefined || (data.adminResponse !== undefined && data.adminResponse !== ''), {
+    message: 'At least one of status or adminResponse is required',
+  });
+
+export const createSupportTicketByAdminSchema = z.object({
+  userId: z.string().min(1, 'User ID is required'),
+  subject: z
+    .string()
+    .min(1, 'Subject is required')
+    .max(200, 'Subject is too long')
+    .trim(),
+  message: z
+    .string()
+    .min(1, 'Message is required')
+    .max(2000, 'Message is too long')
+    .trim(),
+});
+
 export type CreateSupportTicketInput = z.infer<typeof createSupportTicketSchema>;
 export type RespondToSupportTicketInput = z.infer<typeof respondToSupportTicketSchema>;
+export type UpdateSupportTicketInput = z.infer<typeof updateSupportTicketSchema>;
+export type CreateSupportTicketByAdminInput = z.infer<typeof createSupportTicketByAdminSchema>;

@@ -373,6 +373,142 @@ export async function deleteAssignment(assignmentId: string, adminId: string) {
   return { success: true };
 }
 
+const deliveryAssignmentInclude = {
+  order: {
+    include: {
+      buyer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+    },
+  },
+  farmer: {
+    include: {
+      user: {
+        select: {
+          email: true,
+          phone: true,
+        },
+      },
+    },
+  },
+  deliveryAddress: true,
+} as const;
+
+/**
+ * Get a single delivery assignment by ID (for admin review)
+ */
+export async function getDeliveryAssignmentById(assignmentId: string) {
+  const assignment = await prisma.deliveryAssignment.findUnique({
+    where: { id: assignmentId },
+    include: deliveryAssignmentInclude,
+  });
+  if (!assignment) {
+    throw createError('Delivery assignment not found', 404, 'ASSIGNMENT_NOT_FOUND');
+  }
+  return assignment;
+}
+
+export interface CreateDeliveryByAdminData {
+  orderId: string;
+  farmerId: string;
+  assignedQuantity: number;
+  deliveryDate?: string; // ISO date; defaults to order.deliveryDate
+}
+
+/**
+ * Create a single delivery assignment by admin (manual Add New Delivery)
+ */
+export async function createDeliveryAssignmentByAdmin(
+  adminId: string,
+  data: CreateDeliveryByAdminData
+) {
+  const order = await prisma.order.findUnique({
+    where: { id: data.orderId },
+    include: {
+      buyer: { include: { user: true } },
+      deliveryAddress: true,
+      assignments: true,
+    },
+  });
+
+  if (!order) {
+    throw createError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
+
+  if (order.status !== OrderStatus.ALLOCATION && order.status !== OrderStatus.APPROVED) {
+    throw createError(
+      `Order must be in ALLOCATION or APPROVED status. Current: ${order.status}`,
+      400,
+      'INVALID_ORDER_STATUS'
+    );
+  }
+
+  const totalAssigned =
+    order.assignments.reduce((sum, a) => sum + a.assignedQuantity, 0) + data.assignedQuantity;
+  if (totalAssigned > order.quantity) {
+    throw createError(
+      `Total assigned quantity (${totalAssigned}) would exceed order quantity (${order.quantity})`,
+      400,
+      'OVER_ALLOCATION'
+    );
+  }
+
+  if (data.assignedQuantity <= 0) {
+    throw createError('Assigned quantity must be greater than 0', 400, 'INVALID_QUANTITY');
+  }
+
+  const farmers = await prisma.farmer.findMany({
+    where: {
+      id: data.farmerId,
+      user: {
+        status: { in: [UserStatus.ACTIVE, UserStatus.PROBATIONARY] },
+      },
+    },
+  });
+  if (farmers.length === 0) {
+    throw createError('Farmer not found or not active', 404, 'FARMER_NOT_FOUND');
+  }
+
+  const deliveryDate = data.deliveryDate
+    ? new Date(data.deliveryDate)
+    : new Date(order.deliveryDate);
+
+  const assignment = await prisma.deliveryAssignment.create({
+    data: {
+      orderId: order.id,
+      farmerId: data.farmerId,
+      assignedQuantity: data.assignedQuantity,
+      deliveryDate,
+      deliveryAddressId: order.deliveryAddressId,
+      status: AssignmentStatus.PENDING,
+    },
+    include: deliveryAssignmentInclude,
+  });
+
+  const farmer = await prisma.farmer.findUnique({
+    where: { id: data.farmerId },
+    select: { userId: true },
+  });
+  if (farmer?.userId) {
+    await notifyUser(
+      farmer.userId,
+      'NEW_ASSIGNMENT',
+      'New delivery assignment',
+      `You have a new delivery: ${data.assignedQuantity} units of ${order.productType} for ${deliveryDate.toLocaleDateString()}.`,
+      { deliveryAssignmentId: assignment.id, orderId: order.id }
+    ).catch((err) => console.error('[Notification]', err));
+  }
+
+  return assignment;
+}
+
 /**
  * Confirm a delivery assignment (US-ADMIN-008)
  * Admin confirms delivery and quality, updates assignment status

@@ -61,6 +61,8 @@ export const farmerRegistrationSchema = z
       }),
     // When submitting as JSON (upload-on-add flow), photos are pre-uploaded URLs
     photoUrls: z.array(z.string().url()).min(1).max(10).optional(),
+    // Certificates: optional, 0–10 URLs
+    certificateUrls: z.array(z.string().url()).max(10).optional(),
   })
   .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
     message: 'Maximum capacity must be greater than or equal to minimum capacity',
@@ -106,6 +108,17 @@ export const buyerRegistrationSchema = z.object({
     .int('Estimated volume must be a whole number')
     .min(1, 'Estimated volume must be at least 1')
     .max(100000, 'Estimated volume is too large')
+    .optional(),
+  orderFrequency: z
+    .enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY', 'AS_NEEDED'])
+    .optional(),
+  companyRegistrationUrls: z
+    .array(z.string().url())
+    .min(1, 'At least one company registration document is required')
+    .max(10, 'Maximum 10 company registration documents allowed'),
+  supportingDocUrls: z
+    .array(z.string().url())
+    .max(10, 'Maximum 10 supporting documents allowed')
     .optional(),
   deliveryAddresses: z
     .array(

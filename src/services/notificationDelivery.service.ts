@@ -52,7 +52,7 @@ export async function notifyUser(
   const shouldSms = options.sendSms !== false && user.phone;
 
   if (shouldEmail && env.SENDGRID_API_KEY && env.SENDGRID_FROM_EMAIL) {
-    sendEmailAsync(user.email!, title, message, getEmailHtml(title, message)).catch((err) =>
+    sendEmail(user.email!, title, message, getEmailHtml(title, message)).catch((err) =>
       console.error('[Notification] Email send failed:', err)
     );
   }
@@ -72,8 +72,9 @@ export async function notifyUser(
 /**
  * Send email via SendGrid API (fire-and-forget).
  * Sends both plain text and HTML; clients that support HTML will show the branded template.
+ * Exported for use by password reset and other transactional emails.
  */
-async function sendEmailAsync(
+export async function sendEmail(
   to: string,
   subject: string,
   text: string,

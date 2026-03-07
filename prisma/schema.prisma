@@ -124,6 +124,7 @@ model Farmer {
   user                 User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   application          FarmerApplication?
   farmPhotos           FarmPhoto[]
+  farmCertificates     FarmCertificate[]
   weeklyAvailability   WeeklyAvailability[]
   deliveryAssignments  DeliveryAssignment[]
   payments             Payment[]
@@ -145,18 +146,34 @@ model Buyer {
   buyerType           BuyerType @map("buyer_type")
   contactPerson       String    @map("contact_person")
   estimatedVolume     Int?      @map("estimated_volume")
+  orderFrequency      String?   @map("order_frequency") // WEEKLY | BIWEEKLY | MONTHLY | AS_NEEDED
   verificationDate    DateTime? @map("verification_date")
   verificationAdminId String?   @map("verification_admin_id")
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   registration      BuyerRegistration?
   deliveryAddresses DeliveryAddress[]
+  buyerDocuments    BuyerDocument[]
   orders            Order[]
   standingOrders    StandingOrder[]
 
   @@index([userId])
   @@index([buyerType])
   @@map("buyers")
+}
+
+model BuyerDocument {
+  id           String   @id @default(cuid())
+  buyerId      String   @map("buyer_id")
+  filePath     String   @map("file_path")
+  fileType     String   @map("file_type")
+  documentType String   @map("document_type") // COMPANY_REGISTRATION | SUPPORTING
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  buyer Buyer @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@map("buyer_documents")
 }
 
 model DeliveryAddress {
@@ -223,6 +240,19 @@ model FarmPhoto {
 
   @@index([farmerId])
   @@map("farm_photos")
+}
+
+model FarmCertificate {
+  id         String   @id @default(cuid())
+  farmerId   String   @map("farmer_id")
+  filePath   String   @map("file_path")
+  fileType   String   @map("file_type")
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@index([farmerId])
+  @@map("farm_certificates")
 }
 
 model AuditLog {

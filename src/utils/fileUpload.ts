@@ -149,6 +149,107 @@ export function validateImageFile(file: Express.Multer.File): void {
   }
 }
 
+/** Mime types allowed for document/photo uploads (supplier and buyer) */
+const IMAGE_OR_PDF_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+];
+
+/**
+ * Validate image or PDF file (for farm photos, certificates, buyer docs).
+ * @param file - File object from multer
+ */
+export function validateImageOrPdfFile(file: Express.Multer.File): void {
+  if (!file.mimetype || !IMAGE_OR_PDF_MIME_TYPES.includes(file.mimetype)) {
+    throw createError(
+      'Invalid file type. Only JPEG, PNG, WebP images and PDF are allowed.',
+      400,
+      'INVALID_FILE_TYPE'
+    );
+  }
+
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  if (file.size > maxSize) {
+    throw createError(
+      'File size too large. Maximum size is 5MB.',
+      400,
+      'FILE_TOO_LARGE'
+    );
+  }
+
+  if (!file.buffer || file.buffer.length === 0) {
+    throw createError('File buffer is empty', 400, 'EMPTY_FILE');
+  }
+}
+
+/**
+ * Upload image or PDF to Cloudinary (for farm photos, certificates, buyer docs).
+ * Images use image pipeline; PDFs use raw storage.
+ */
+export async function uploadImageOrPdfToCloudinary(
+  fileBuffer: Buffer,
+  folder: string,
+  fileName: string,
+  mimetype: string
+): Promise<UploadResult> {
+  if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
+    throw createError(
+      'Cloudinary is not configured. Please set Cloudinary credentials in environment variables.',
+      500,
+      'CLOUDINARY_NOT_CONFIGURED'
+    );
+  }
+
+  const isPdf = mimetype === 'application/pdf';
+
+  return new Promise((resolve, reject) => {
+    const uploadOptions: any = {
+      folder: `sourceli/${folder}`,
+      public_id: fileName,
+      resource_type: isPdf ? 'raw' : 'image',
+    };
+
+    if (!isPdf) {
+      uploadOptions.allowed_formats = ['jpg', 'jpeg', 'png', 'webp'];
+      uploadOptions.transformation = [{ quality: 'auto:good', fetch_format: 'auto' }];
+    }
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error) {
+          reject(
+            createError(
+              `Failed to upload file: ${error.message}`,
+              500,
+              'UPLOAD_FAILED'
+            )
+          );
+          return;
+        }
+        if (!result) {
+          reject(createError('Upload failed: No result returned', 500, 'UPLOAD_FAILED'));
+          return;
+        }
+        resolve({
+          publicId: result.public_id,
+          secureUrl: result.secure_url,
+          url: result.url,
+          width: result.width,
+          height: result.height,
+          format: result.format || (isPdf ? 'pdf' : ''),
+          bytes: result.bytes ?? 0,
+        });
+      }
+    );
+
+    uploadStream.end(fileBuffer);
+  });
+}
+
 
 
 

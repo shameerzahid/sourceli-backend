@@ -5,10 +5,14 @@ import {
   getFarmerPayments,
   getPaymentReports,
   getOutstandingBalance,
+  getPaymentById,
+  updatePayment,
+  deletePayment,
 } from '../services/payment.service.js';
 import {
   recordPaymentSchema,
   paymentReportFiltersSchema,
+  updatePaymentSchema,
 } from '../validators/payment.validator.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { prisma } from '../config/database.js';
@@ -61,12 +65,108 @@ export const recordPaymentHandler = wrapAsync(
  */
 export const getPaymentReportsHandler = wrapAsync(
   async (req: AuthRequest, res: Response): Promise<void> => {
-    const filters = paymentReportFiltersSchema.parse(req.query);
+    const raw = req.query as Record<string, string | undefined>;
+    const filters = paymentReportFiltersSchema.parse({
+      ...raw,
+      paymentStatus: raw.paymentStatus ?? raw.status,
+    });
     const reports = await getPaymentReports(filters);
 
     res.status(200).json({
       success: true,
       data: reports,
+    });
+  }
+);
+
+/**
+ * Get a single payment by ID
+ * GET /api/admin/payments/:id
+ */
+export const getPaymentByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+    const { id } = req.params;
+    const payment = await getPaymentById(id);
+    res.status(200).json({
+      success: true,
+      data: payment,
+    });
+  }
+);
+
+/**
+ * Update a payment
+ * PATCH /api/admin/payments/:id
+ */
+export const updatePaymentHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+    const { id } = req.params;
+    const validatedData = updatePaymentSchema.parse(req.body);
+    const payment = await updatePayment(id, req.user.userId, validatedData);
+
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'PAYMENT_UPDATED',
+      entityType: 'Payment',
+      entityId: id,
+      details: {
+        farmerId: payment.farmerId,
+        amountPaid: payment.amountPaid,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment updated successfully',
+      data: payment,
+    });
+  }
+);
+
+/**
+ * Delete a payment
+ * DELETE /api/admin/payments/:id
+ */
+export const deletePaymentHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+    const { id } = req.params;
+    const result = await deletePayment(id);
+
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'PAYMENT_DELETED',
+      entityType: 'Payment',
+      entityId: id,
+      details: { paymentId: result.paymentId },
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment deleted successfully',
+      data: result,
     });
   }
 );
