@@ -24,6 +24,8 @@ import {
   createOrderHandler,
   updateOrderHandler,
   deleteOrderHandler,
+  getBuyerOrderPaymentsHandler,
+  confirmBuyerOrderPaymentHandler,
 } from '../controllers/admin.controller.js';
 import {
   getAllocationDataHandler,
@@ -127,6 +129,10 @@ router.get('/payments/:id', getPaymentByIdHandler);
 router.post('/payments', recordPaymentHandler);
 router.patch('/payments/:id', updatePaymentHandler);
 router.delete('/payments/:id', deletePaymentHandler);
+
+// Buyer-to-supplier payments (buyer recorded; admin confirms)
+router.get('/buyer-order-payments', getBuyerOrderPaymentsHandler);
+router.post('/buyer-order-payments/:id/confirm', confirmBuyerOrderPaymentHandler);
 
 // Performance rules (US-ADMIN-006), review, and override (US-ADMIN-009)
 router.get('/performance-rules', getPerformanceRulesHandler);

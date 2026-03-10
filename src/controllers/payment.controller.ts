@@ -8,7 +8,12 @@ import {
   getPaymentById,
   updatePayment,
   deletePayment,
+  confirmPaymentReceiptByFarmer,
 } from '../services/payment.service.js';
+import {
+  getFarmerBuyerPayments,
+  confirmBuyerPaymentReceiptByFarmer,
+} from '../services/buyerOrderPayment.service.js';
 import {
   recordPaymentSchema,
   paymentReportFiltersSchema,
@@ -243,9 +248,124 @@ export const getOutstandingBalanceHandler = wrapAsync(
   }
 );
 
+/**
+ * Farmer confirms receipt of a payment (safe: only sets timestamp)
+ * POST /api/farmers/payments/:id/confirm-receipt
+ * Farmer only; payment must belong to this farmer
+ */
+export const confirmPaymentReceiptHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
 
+    const farmer = await prisma.farmer.findUnique({
+      where: { userId: req.user.userId },
+    });
 
+    if (!farmer) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Farmer profile not found',
+      });
+      return;
+    }
 
+    const { id } = req.params;
+    const payment = await confirmPaymentReceiptByFarmer(id, farmer.id);
 
+    res.status(200).json({
+      success: true,
+      message: payment.supplierConfirmedAt ? 'Receipt confirmed.' : 'Already confirmed.',
+      data: payment,
+    });
+  }
+);
 
+/**
+ * Get payments from buyers to this farmer (buyer paid supplier)
+ * GET /api/farmers/buyer-payments
+ */
+export const getFarmerBuyerPaymentsHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
 
+    const farmer = await prisma.farmer.findUnique({
+      where: { userId: req.user.userId },
+    });
+
+    if (!farmer) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Farmer profile not found',
+      });
+      return;
+    }
+
+    const payments = await getFarmerBuyerPayments(farmer.id);
+
+    res.status(200).json({
+      success: true,
+      data: payments,
+    });
+  }
+);
+
+/**
+ * Farmer confirms receipt of a buyer payment
+ * POST /api/farmers/buyer-payments/:id/confirm-receipt
+ */
+export const confirmBuyerPaymentReceiptHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const farmer = await prisma.farmer.findUnique({
+      where: { userId: req.user.userId },
+    });
+
+    if (!farmer) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Farmer profile not found',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const payment = await confirmBuyerPaymentReceiptByFarmer(id, farmer.id);
+
+    await createAuditLog({
+        userId: req.user.userId,
+        actionType: 'BUYER_ORDER_PAYMENT_SUPPLIER_CONFIRMED',
+        entityType: 'Order',
+        entityId: payment.orderId,
+        details: {
+          buyerOrderPaymentId: payment.id,
+          farmerId: farmer.id,
+        },
+        ipAddress: req.ip,
+      });
+
+    res.status(200).json({
+      success: true,
+      message: payment.supplierConfirmedAt ? 'Receipt confirmed.' : 'Already confirmed.',
+      data: payment,
+    });
+  }
+);

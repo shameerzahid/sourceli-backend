@@ -10,6 +10,9 @@ import {
   createOrder,
   getBuyerOrders,
   getOrderById,
+  cancelOrderByBuyer,
+  updateOrderByBuyer,
+  createBuyerOrderPayment,
 } from '../services/order.service.js';
 import {
   createStandingOrder,
@@ -21,16 +24,24 @@ import {
   createSupportTicket,
   listSupportTicketsByBuyer,
   getSupportTicketByIdForBuyer,
+  updateSupportTicketByBuyer,
+  deleteSupportTicketByBuyer,
 } from '../services/supportTicket.service.js';
 import {
   createDeliveryAddressSchema,
   updateDeliveryAddressSchema,
   createOrderSchema,
+  updateOrderSchema,
+  recordBuyerOrderPaymentSchema,
   createStandingOrderSchema,
   updateStandingOrderSchema,
 } from '../validators/buyer.validator.js';
-import { createSupportTicketSchema } from '../validators/supportTicket.validator.js';
+import {
+  createSupportTicketSchema,
+  updateSupportTicketByBuyerSchema,
+} from '../validators/supportTicket.validator.js';
 import { getBuyerDashboard } from '../services/dashboard.service.js';
+import { getBuyerPaymentsToSuppliers } from '../services/buyerOrderPayment.service.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { prisma } from '../config/database.js';
 import { createAuditLog } from '../utils/auditLog.js';
@@ -348,6 +359,158 @@ export const getOrderByIdHandler = wrapAsync(
   }
 );
 
+/**
+ * Cancel order (buyer only). Only PENDING or PENDING_MODIFICATION.
+ * POST /api/buyers/orders/:id/cancel
+ */
+export const cancelOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const order = await cancelOrderByBuyer(id, req.user.userId);
+
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'ORDER_CANCELLED_BY_BUYER',
+      entityType: 'Order',
+      entityId: order.id,
+      details: { previousStatus: 'PENDING_or_PENDING_MODIFICATION' },
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Order cancelled.',
+      data: order,
+    });
+  }
+);
+
+/**
+ * Update order (buyer only). Only PENDING or PENDING_MODIFICATION.
+ * PUT /api/buyers/orders/:id
+ */
+export const updateOrderHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const validatedData = updateOrderSchema.parse(req.body);
+    const data: {
+      productType?: string;
+      quantity?: number;
+      deliveryDate?: Date;
+      deliveryAddressId?: string;
+      notes?: string;
+    } = {};
+    if (validatedData.productType !== undefined) data.productType = validatedData.productType;
+    if (validatedData.quantity !== undefined) data.quantity = validatedData.quantity;
+    if (validatedData.deliveryDate !== undefined) data.deliveryDate = validatedData.deliveryDate;
+    if (validatedData.deliveryAddressId !== undefined) data.deliveryAddressId = validatedData.deliveryAddressId;
+    if (validatedData.notes !== undefined) data.notes = validatedData.notes ?? undefined;
+
+    const order = await updateOrderByBuyer(id, req.user.userId, data);
+
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'ORDER_UPDATED_BY_BUYER',
+      entityType: 'Order',
+      entityId: order.id,
+      details: {},
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Order updated.',
+      data: order,
+    });
+  }
+);
+
+/**
+ * Record payment for an order (buyer, offline). Only ALLOCATION or DELIVERED.
+ * POST /api/buyers/orders/:id/record-payment
+ */
+export const recordOrderPaymentHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const validatedData = recordBuyerOrderPaymentSchema.parse(req.body);
+    const payment = await createBuyerOrderPayment(id, req.user.userId, {
+      deliveryAssignmentId: validatedData.deliveryAssignmentId,
+      amountPaid: validatedData.amountPaid,
+      paymentMethod: validatedData.paymentMethod,
+      paymentDate: validatedData.paymentDate,
+      notes: validatedData.notes,
+    });
+
+    await createAuditLog({
+      userId: req.user.userId,
+      actionType: 'BUYER_RECORDED_ORDER_PAYMENT',
+      entityType: 'Order',
+      entityId: payment.orderId,
+      details: {
+        buyerOrderPaymentId: payment.id,
+        deliveryAssignmentId: payment.deliveryAssignmentId ?? undefined,
+        farmerId: payment.farmerId ?? undefined,
+        amountPaid: validatedData.amountPaid,
+        paymentMethod: validatedData.paymentMethod,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Payment recorded.',
+      data: payment,
+    });
+  }
+);
+
+/**
+ * Get buyer's payments to suppliers (buyer pays supplier, with confirmation status)
+ * GET /api/buyers/payments-to-suppliers
+ */
+export const getPaymentsToSuppliersHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const payments = await getBuyerPaymentsToSuppliers(req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      data: payments,
+    });
+  }
+);
+
 // --- Standing orders ---
 
 /**
@@ -546,6 +709,56 @@ export const getSupportTicketByIdHandler = wrapAsync(
     res.status(200).json({
       success: true,
       data: ticket,
+    });
+  }
+);
+
+/**
+ * Update support ticket (own only, subject and/or message). Allowed only before admin has responded.
+ * PATCH /api/buyers/support-tickets/:id
+ */
+export const updateSupportTicketHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    const validatedData = updateSupportTicketByBuyerSchema.parse(req.body);
+    const ticket = await updateSupportTicketByBuyer(id, req.user.userId, validatedData);
+
+    res.status(200).json({
+      success: true,
+      message: 'Support ticket updated.',
+      data: ticket,
+    });
+  }
+);
+
+/**
+ * Delete support ticket (own only). Allowed only before admin has responded.
+ * DELETE /api/buyers/support-tickets/:id
+ */
+export const deleteSupportTicketHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const { id } = req.params;
+    await deleteSupportTicketByBuyer(id, req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Support ticket deleted.',
     });
   }
 );

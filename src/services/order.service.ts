@@ -1,6 +1,6 @@
 import { prisma } from '../config/database.js';
 import { createError } from '../middleware/errorHandler.js';
-import { OrderType, OrderStatus, UserStatus } from '@prisma/client';
+import { OrderType, OrderStatus, UserStatus, PaymentMethod } from '@prisma/client';
 import { notifyUser } from './notificationDelivery.service.js';
 
 export interface CreateOrderData {
@@ -125,6 +125,7 @@ export async function getBuyerOrders(buyerId: string, filters?: {
     where,
     include: {
       deliveryAddress: true,
+      buyerOrderPayments: true,
       assignments: {
         include: {
           farmer: {
@@ -168,6 +169,7 @@ export async function getOrderById(orderId: string, buyerId: string) {
     },
     include: {
       deliveryAddress: true,
+      buyerOrderPayments: true,
       assignments: {
         include: {
           farmer: {
@@ -200,6 +202,234 @@ export async function getOrderById(orderId: string, buyerId: string) {
   }
 
   return order;
+}
+
+/**
+ * Cancel order by buyer (soft cancel: set status to CANCELLED).
+ * Only PENDING or PENDING_MODIFICATION orders can be cancelled.
+ */
+export async function cancelOrderByBuyer(orderId: string, buyerUserId: string) {
+  const buyer = await prisma.buyer.findUnique({
+    where: { userId: buyerUserId },
+  });
+
+  if (!buyer) {
+    throw createError('Buyer not found', 404, 'BUYER_NOT_FOUND');
+  }
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      buyerId: buyer.id,
+    },
+  });
+
+  if (!order) {
+    throw createError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
+
+  if (
+    order.status !== OrderStatus.PENDING &&
+    order.status !== OrderStatus.PENDING_MODIFICATION
+  ) {
+    throw createError(
+      `Cannot cancel order with status: ${order.status}. Only pending or modification-requested orders can be cancelled.`,
+      400,
+      'INVALID_ORDER_STATUS'
+    );
+  }
+
+  return prisma.order.update({
+    where: { id: orderId },
+    data: { status: OrderStatus.CANCELLED },
+    include: {
+      deliveryAddress: true,
+    },
+  });
+}
+
+export interface RecordBuyerOrderPaymentData {
+  deliveryAssignmentId: string;
+  amountPaid: number;
+  paymentMethod: PaymentMethod;
+  paymentDate: Date;
+  notes?: string;
+}
+
+/**
+ * Record a buyer payment to supplier (per delivery assignment). Only ALLOCATION or DELIVERED orders.
+ */
+export async function createBuyerOrderPayment(
+  orderId: string,
+  buyerUserId: string,
+  data: RecordBuyerOrderPaymentData
+) {
+  const buyer = await prisma.buyer.findUnique({
+    where: { userId: buyerUserId },
+  });
+
+  if (!buyer) {
+    throw createError('Buyer not found', 404, 'BUYER_NOT_FOUND');
+  }
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      buyerId: buyer.id,
+    },
+  });
+
+  if (!order) {
+    throw createError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
+
+  const allowedStatuses: OrderStatus[] = [OrderStatus.ALLOCATION, OrderStatus.DELIVERED];
+  if (!allowedStatuses.includes(order.status)) {
+    throw createError(
+      `Cannot record payment for order with status: ${order.status}. Only orders in allocation or delivered can be paid.`,
+      400,
+      'INVALID_ORDER_STATUS'
+    );
+  }
+
+  const assignment = await prisma.deliveryAssignment.findFirst({
+    where: {
+      id: data.deliveryAssignmentId,
+      orderId,
+    },
+    include: { farmer: true },
+  });
+
+  if (!assignment) {
+    throw createError(
+      'Delivery assignment not found or does not belong to this order',
+      404,
+      'ASSIGNMENT_NOT_FOUND'
+    );
+  }
+
+  const payment = await prisma.buyerOrderPayment.create({
+    data: {
+      orderId,
+      deliveryAssignmentId: data.deliveryAssignmentId,
+      farmerId: assignment.farmerId,
+      amountPaid: data.amountPaid,
+      paymentMethod: data.paymentMethod,
+      paymentDate: data.paymentDate,
+      recordedBy: buyerUserId,
+      notes: data.notes?.trim() || null,
+    },
+    include: {
+      order: { include: { deliveryAddress: true } },
+      deliveryAssignment: true,
+      farmer: {
+        include: {
+          user: { select: { email: true, phone: true } },
+        },
+      },
+    },
+  });
+
+  return payment;
+}
+
+export interface UpdateOrderByBuyerData {
+  productType?: string;
+  quantity?: number;
+  deliveryDate?: Date;
+  deliveryAddressId?: string;
+  notes?: string;
+}
+
+/**
+ * Update an order by buyer. Only PENDING or PENDING_MODIFICATION orders can be updated.
+ */
+export async function updateOrderByBuyer(
+  orderId: string,
+  buyerUserId: string,
+  data: UpdateOrderByBuyerData
+) {
+  const buyer = await prisma.buyer.findUnique({
+    where: { userId: buyerUserId },
+  });
+
+  if (!buyer) {
+    throw createError('Buyer not found', 404, 'BUYER_NOT_FOUND');
+  }
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      buyerId: buyer.id,
+    },
+    include: { buyer: true },
+  });
+
+  if (!order) {
+    throw createError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
+
+  if (
+    order.status !== OrderStatus.PENDING &&
+    order.status !== OrderStatus.PENDING_MODIFICATION
+  ) {
+    throw createError(
+      `Cannot update order with status: ${order.status}. Only PENDING or PENDING_MODIFICATION orders can be updated.`,
+      400,
+      'INVALID_ORDER_STATUS'
+    );
+  }
+
+  const updateData: Record<string, unknown> = {};
+
+  if (data.productType !== undefined) {
+    updateData.productType = data.productType.trim();
+  }
+  if (data.quantity !== undefined) {
+    if (data.quantity <= 0) {
+      throw createError('Quantity must be greater than 0', 400, 'INVALID_QUANTITY');
+    }
+    updateData.quantity = data.quantity;
+  }
+  if (data.deliveryDate !== undefined) {
+    const d = new Date(data.deliveryDate);
+    if (isNaN(d.getTime())) {
+      throw createError('Invalid delivery date', 400, 'INVALID_DELIVERY_DATE');
+    }
+    if (d <= new Date()) {
+      throw createError('Delivery date must be in the future', 400, 'INVALID_DELIVERY_DATE');
+    }
+    updateData.deliveryDate = d;
+  }
+  if (data.deliveryAddressId !== undefined) {
+    const address = await prisma.deliveryAddress.findFirst({
+      where: {
+        id: data.deliveryAddressId,
+        buyerId: buyer.id,
+      },
+    });
+    if (!address) {
+      throw createError(
+        'Delivery address not found or does not belong to you',
+        404,
+        'ADDRESS_NOT_FOUND'
+      );
+    }
+    updateData.deliveryAddressId = data.deliveryAddressId;
+  }
+  if (data.notes !== undefined) {
+    updateData.notes = data.notes?.trim() || null;
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: updateData as any,
+    include: {
+      deliveryAddress: true,
+    },
+  });
+
+  return updated;
 }
 
 /**

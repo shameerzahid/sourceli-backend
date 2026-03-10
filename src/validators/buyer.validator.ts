@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { OrderType } from '@prisma/client';
+import { OrderType, PaymentMethod } from '@prisma/client';
 
 /**
  * Create delivery address schema
@@ -85,6 +85,40 @@ export const createOrderSchema = z.object({
 });
 
 /**
+ * Update order by buyer (partial). Only PENDING or PENDING_MODIFICATION.
+ */
+export const updateOrderSchema = z.object({
+  productType: z.string().min(1).max(100).transform((s) => s.trim()).optional(),
+  quantity: z.number().int().min(1).max(1000000).optional(),
+  deliveryDate: z
+    .string()
+    .datetime()
+    .or(z.date())
+    .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+    .refine((date) => date > new Date(), { message: 'Delivery date must be in the future' })
+    .optional(),
+  deliveryAddressId: z.string().min(1).optional(),
+  notes: z.string().max(1000).optional().transform((s) => (s == null || s === '' ? null : s.trim())),
+});
+
+/**
+ * Record buyer payment to supplier (per delivery assignment). Only ALLOCATION or DELIVERED orders.
+ */
+export const recordBuyerOrderPaymentSchema = z.object({
+  deliveryAssignmentId: z.string().min(1, 'Delivery assignment is required'),
+  amountPaid: z.number().positive('Amount must be greater than 0'),
+  paymentMethod: z.nativeEnum(PaymentMethod, {
+    errorMap: () => ({ message: 'Invalid payment method' }),
+  }),
+  paymentDate: z
+    .string()
+    .datetime()
+    .or(z.date())
+    .transform((val) => (typeof val === 'string' ? new Date(val) : val)),
+  notes: z.string().max(500).trim().optional(),
+});
+
+/**
  * Create standing order schema
  * preferredDeliveryDayOfWeek: 0 = Sunday, 1 = Monday, ... 6 = Saturday
  */
@@ -127,10 +161,35 @@ export const createStandingOrderSchema = z.object({
 });
 
 /**
- * Update standing order (pause/cancel = isActive: false, resume = isActive: true)
+ * Update standing order (amend details and/or pause/resume)
  */
 export const updateStandingOrderSchema = z.object({
   isActive: z.boolean().optional(),
+  quantity: z
+    .number()
+    .int('Quantity must be a whole number')
+    .positive('Quantity must be greater than 0')
+    .optional(),
+  preferredDeliveryDayOfWeek: z
+    .number()
+    .int()
+    .min(0, 'Day must be 0 (Sunday) to 6 (Saturday)')
+    .max(6, 'Day must be 0 (Sunday) to 6 (Saturday)')
+    .optional(),
+  deliveryAddressId: z.string().min(1, 'Delivery address is required').optional(),
+  startDate: z
+    .string()
+    .datetime()
+    .or(z.date())
+    .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+    .optional(),
+  endDate: z
+    .union([z.string().datetime(), z.date(), z.null()])
+    .optional()
+    .transform((val) =>
+      val === undefined ? undefined : val == null ? null : typeof val === 'string' ? new Date(val) : val
+    ),
+  notes: z.string().max(500, 'Notes are too long').trim().optional(),
 });
 
 export type CreateDeliveryAddressInput = z.infer<typeof createDeliveryAddressSchema>;

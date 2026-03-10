@@ -42,12 +42,14 @@ enum OrderStatus {
   DELIVERED
   FAILED
   REJECTED
+  CANCELLED  // Buyer withdrew order (only from PENDING or PENDING_MODIFICATION)
 }
 
 enum AssignmentStatus {
   PENDING
   DELIVERED
   FAILED
+  CANCELLED  // Farmer declined / cancelled assignment
 }
 
 enum QualityResult {
@@ -126,8 +128,10 @@ model Farmer {
   farmPhotos           FarmPhoto[]
   farmCertificates     FarmCertificate[]
   weeklyAvailability   WeeklyAvailability[]
+  monthlyAvailability  MonthlyAvailability[]
   deliveryAssignments  DeliveryAssignment[]
   payments             Payment[]
+  buyerOrderPayments   BuyerOrderPayment[]
   performance          FarmerPerformance?
   performanceHistory   FarmerPerformanceHistory[]
   performanceBreakdown FarmerPerformanceBreakdown?
@@ -310,6 +314,26 @@ model WeeklyAvailability {
   @@map("weekly_availability")
 }
 
+model MonthlyAvailability {
+  id                String   @id @default(cuid())
+  farmerId          String   @map("farmer_id")
+  monthStartDate    DateTime @map("month_start_date") // First day of month
+  productType       String   @map("product_type")
+  quantityAvailable Int      @map("quantity_available")
+  avgWeight         Float?   @map("avg_weight")
+  readyDate         DateTime @map("ready_date")
+  submittedAt       DateTime @default(now()) @map("submitted_at")
+  isLate            Boolean  @default(false) @map("is_late")
+
+  farmer Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@unique([farmerId, monthStartDate, productType])
+  @@index([farmerId])
+  @@index([monthStartDate])
+  @@index([productType])
+  @@map("monthly_availability")
+}
+
 model Order {
   id                String       @id @default(cuid())
   buyerId           String       @map("buyer_id")
@@ -332,6 +356,7 @@ model Order {
   deliveryAddress  DeliveryAddress      @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
   standingOrder    StandingOrder?       @relation(fields: [standingOrderId], references: [id], onDelete: SetNull)
   assignments      DeliveryAssignment[]
+  buyerOrderPayments BuyerOrderPayment[]
 
   @@index([buyerId])
   @@index([status])
@@ -339,6 +364,33 @@ model Order {
   @@index([productType])
   @@index([standingOrderId])
   @@map("orders")
+}
+
+// Buyer-recorded payment to supplier (per delivery assignment). Admin and supplier can confirm.
+// deliveryAssignmentId/farmerId null = legacy order-level payment; set = "buyer paid this supplier".
+model BuyerOrderPayment {
+  id                    String        @id @default(cuid())
+  orderId               String        @map("order_id")
+  deliveryAssignmentId  String?       @map("delivery_assignment_id") // which delivery/supplier was paid
+  farmerId              String?       @map("farmer_id") // denormalized for "payments to this farmer" queries
+  amountPaid            Float         @map("amount_paid")
+  paymentMethod         PaymentMethod @map("payment_method")
+  paymentDate           DateTime      @map("payment_date")
+  recordedBy            String        @map("recorded_by") // User ID (buyer)
+  notes                 String?
+  adminConfirmedAt      DateTime?     @map("admin_confirmed_at")
+  supplierConfirmedAt  DateTime?     @map("supplier_confirmed_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+
+  order              Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliveryAssignment DeliveryAssignment? @relation(fields: [deliveryAssignmentId], references: [id], onDelete: Cascade)
+  farmer             Farmer?             @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([farmerId])
+  @@index([deliveryAssignmentId])
+  @@index([paymentDate])
+  @@map("buyer_order_payments")
 }
 
 // Milestone 3: Standing (recurring) order template
@@ -384,10 +436,11 @@ model DeliveryAssignment {
   confirmedAt         DateTime?      @map("confirmed_at")
   estimatedTimeWindow  String?        @map("estimated_time_window") // e.g. "9:00-12:00" (US-BUYER-004)
 
-  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  farmer          Farmer          @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  deliveryAddress DeliveryAddress @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
-  payments        Payment[]
+  order              Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  farmer             Farmer             @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  deliveryAddress    DeliveryAddress    @relation(fields: [deliveryAddressId], references: [id], onDelete: Restrict)
+  payments           Payment[]
+  buyerOrderPayments BuyerOrderPayment[]
 
   @@index([orderId])
   @@index([farmerId])
@@ -397,17 +450,18 @@ model DeliveryAssignment {
 }
 
 model Payment {
-  id                   String         @id @default(cuid())
-  farmerId             String         @map("farmer_id")
-  deliveryAssignmentId String?        @map("delivery_assignment_id")
-  amountOwed           Float          @map("amount_owed")
-  amountPaid           Float          @default(0) @map("amount_paid")
-  paymentStatus        PaymentStatus  @default(NOT_PAID) @map("payment_status")
-  paymentMethod        PaymentMethod? @map("payment_method")
-  paymentDate          DateTime?      @map("payment_date")
-  recordedBy           String         @map("recorded_by")
-  notes                String?
-  createdAt            DateTime       @default(now()) @map("created_at")
+  id                    String         @id @default(cuid())
+  farmerId              String         @map("farmer_id")
+  deliveryAssignmentId  String?        @map("delivery_assignment_id")
+  amountOwed            Float          @map("amount_owed")
+  amountPaid            Float          @default(0) @map("amount_paid")
+  paymentStatus         PaymentStatus  @default(NOT_PAID) @map("payment_status")
+  paymentMethod         PaymentMethod? @map("payment_method")
+  paymentDate           DateTime?      @map("payment_date")
+  recordedBy            String         @map("recorded_by")
+  notes                 String?
+  supplierConfirmedAt   DateTime?      @map("supplier_confirmed_at") // Farmer marks "I received this payment" (no amount/status change)
+  createdAt             DateTime       @default(now()) @map("created_at")
 
   farmer     Farmer              @relation(fields: [farmerId], references: [id], onDelete: Cascade)
   assignment DeliveryAssignment? @relation(fields: [deliveryAssignmentId], references: [id], onDelete: SetNull)

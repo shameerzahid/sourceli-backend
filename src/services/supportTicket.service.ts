@@ -57,6 +57,62 @@ export async function getSupportTicketByIdForBuyer(ticketId: string, userId: str
   return ticket;
 }
 
+export interface UpdateSupportTicketByBuyerData {
+  subject?: string;
+  message?: string;
+}
+
+/**
+ * Buyer updates own ticket (subject and/or message). Allowed only when admin has not responded yet.
+ */
+export async function updateSupportTicketByBuyer(
+  ticketId: string,
+  userId: string,
+  data: UpdateSupportTicketByBuyerData
+) {
+  const ticket = await prisma.supportTicket.findFirst({
+    where: { id: ticketId, userId },
+  });
+  if (!ticket) {
+    throw createError('Support ticket not found', 404, 'TICKET_NOT_FOUND');
+  }
+  if (ticket.adminResponse != null) {
+    throw createError('Cannot edit ticket after admin has responded', 400, 'TICKET_ALREADY_RESPONDED');
+  }
+
+  const updateData: { subject?: string; message?: string } = {};
+  if (data.subject !== undefined) updateData.subject = data.subject.trim();
+  if (data.message !== undefined) updateData.message = data.message.trim();
+  if (Object.keys(updateData).length === 0) {
+    throw createError('At least one of subject or message is required', 400, 'VALIDATION_ERROR');
+  }
+
+  return prisma.supportTicket.update({
+    where: { id: ticketId },
+    data: updateData,
+  });
+}
+
+/**
+ * Buyer deletes own ticket. Allowed only when admin has not responded yet.
+ */
+export async function deleteSupportTicketByBuyer(ticketId: string, userId: string) {
+  const ticket = await prisma.supportTicket.findFirst({
+    where: { id: ticketId, userId },
+  });
+  if (!ticket) {
+    throw createError('Support ticket not found', 404, 'TICKET_NOT_FOUND');
+  }
+  if (ticket.adminResponse != null) {
+    throw createError('Cannot delete ticket after admin has responded', 400, 'TICKET_ALREADY_RESPONDED');
+  }
+
+  await prisma.supportTicket.delete({
+    where: { id: ticketId },
+  });
+  return { deleted: true };
+}
+
 /**
  * List all support tickets (admin). Optional filter by status.
  */

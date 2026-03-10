@@ -14,6 +14,12 @@ export interface CreateStandingOrderData {
 
 export interface UpdateStandingOrderData {
   isActive?: boolean;
+  quantity?: number;
+  preferredDeliveryDayOfWeek?: number;
+  deliveryAddressId?: string;
+  startDate?: Date;
+  endDate?: Date | null;
+  notes?: string | null;
 }
 
 /**
@@ -192,8 +198,7 @@ export async function getStandingOrderById(
 }
 
 /**
- * Pause or cancel standing order (set isActive = false).
- * Optionally resume (set isActive = true).
+ * Update standing order (amend details and/or pause/resume).
  */
 export async function updateStandingOrder(
   standingOrderId: string,
@@ -211,11 +216,70 @@ export async function updateStandingOrder(
     throw createError('Standing order not found', 404, 'STANDING_ORDER_NOT_FOUND');
   }
 
+  if (data.quantity !== undefined && data.quantity <= 0) {
+    throw createError('Quantity must be greater than 0', 400, 'INVALID_QUANTITY');
+  }
+  if (
+    data.preferredDeliveryDayOfWeek !== undefined &&
+    (data.preferredDeliveryDayOfWeek < 0 || data.preferredDeliveryDayOfWeek > 6)
+  ) {
+    throw createError(
+      'Preferred delivery day must be 0 (Sunday) through 6 (Saturday)',
+      400,
+      'INVALID_DAY'
+    );
+  }
+
+  const newAddressId = data.deliveryAddressId ?? so.deliveryAddressId;
+  if (data.deliveryAddressId) {
+    const address = await prisma.deliveryAddress.findFirst({
+      where: { id: data.deliveryAddressId, buyerId: buyer.id },
+    });
+    if (!address) {
+      throw createError(
+        'Delivery address not found or does not belong to you',
+        404,
+        'ADDRESS_NOT_FOUND'
+      );
+    }
+    const duplicate = await prisma.standingOrder.findFirst({
+      where: {
+        buyerId: buyer.id,
+        productType: so.productType,
+        deliveryAddressId: data.deliveryAddressId,
+        id: { not: standingOrderId },
+        isActive: true,
+      },
+    });
+    if (duplicate) {
+      throw createError(
+        'You already have an active standing order for this product and delivery address.',
+        409,
+        'DUPLICATE_STANDING_ORDER'
+      );
+    }
+  }
+
+  const newStartDate = data.startDate ?? so.startDate;
+  const newEndDate = data.endDate !== undefined ? data.endDate : so.endDate;
+  if (newEndDate != null && newEndDate <= newStartDate) {
+    throw createError('End date must be after start date', 400, 'INVALID_END_DATE');
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    isActive: data.isActive ?? so.isActive,
+  };
+  if (data.quantity !== undefined) updatePayload.quantity = data.quantity;
+  if (data.preferredDeliveryDayOfWeek !== undefined)
+    updatePayload.preferredDeliveryDayOfWeek = data.preferredDeliveryDayOfWeek;
+  if (data.deliveryAddressId !== undefined) updatePayload.deliveryAddressId = data.deliveryAddressId;
+  if (data.startDate !== undefined) updatePayload.startDate = data.startDate;
+  if (data.endDate !== undefined) updatePayload.endDate = data.endDate;
+  if (data.notes !== undefined) updatePayload.notes = data.notes?.trim() ?? null;
+
   return prisma.standingOrder.update({
     where: { id: standingOrderId },
-    data: {
-      isActive: data.isActive ?? so.isActive,
-    },
+    data: updatePayload,
     include: {
       deliveryAddress: true,
     },

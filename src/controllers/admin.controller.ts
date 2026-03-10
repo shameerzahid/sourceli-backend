@@ -67,8 +67,13 @@ import {
   createSupportTicketByAdminSchema,
 } from '../validators/supportTicket.validator.js';
 import { createAuditLog, getAuditLogs, getAuditLogsCount, getAuditLogById, updateAuditLog, createAuditLogEntry } from '../utils/auditLog.js';
+import { notifyUser } from '../services/notificationDelivery.service.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { createProduceCategory } from '../services/system.service.js';
+import {
+  getAdminBuyerOrderPayments,
+  confirmBuyerOrderPaymentByAdmin,
+} from '../services/buyerOrderPayment.service.js';
 
 /**
  * Get all pending farmer applications
@@ -750,6 +755,58 @@ export const deleteOrderHandler = wrapAsync(
   }
 );
 
+/**
+ * Get all buyer-to-supplier payments (buyer recorded; admin/supplier can confirm)
+ * GET /api/admin/buyer-order-payments?orderId=...&farmerId=...
+ */
+export const getBuyerOrderPaymentsHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const orderId = req.query.orderId as string | undefined;
+    const farmerId = req.query.farmerId as string | undefined;
+
+    const payments = await getAdminBuyerOrderPayments(
+      orderId || farmerId ? { orderId, farmerId } : undefined
+    );
+
+    res.json({
+      success: true,
+      data: payments,
+    });
+  }
+);
+
+/**
+ * Admin confirms a buyer payment to supplier
+ * POST /api/admin/buyer-order-payments/:id/confirm
+ */
+export const confirmBuyerOrderPaymentHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const adminId = req.user!.userId;
+    const { id } = req.params;
+
+    const payment = await confirmBuyerOrderPaymentByAdmin(id, adminId);
+
+    await createAuditLog({
+      userId: adminId,
+      actionType: 'BUYER_ORDER_PAYMENT_ADMIN_CONFIRMED',
+      entityType: 'Order',
+      entityId: payment.orderId,
+      details: {
+        buyerOrderPaymentId: payment.id,
+        farmerId: payment.farmerId,
+        deliveryAssignmentId: payment.deliveryAssignmentId,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: 'Payment confirmed.',
+      data: payment,
+    });
+  }
+);
+
 // --- Performance rules (US-ADMIN-006) ---
 
 /**
@@ -1139,6 +1196,15 @@ export const respondToSupportTicketHandler = wrapAsync(
 
     const ticket = await respondToSupportTicket(id, adminId, validatedData);
 
+    await notifyUser(
+      ticket.userId,
+      'SUPPORT_TICKET_RESPONSE',
+      'Support request updated',
+      'An admin has responded to your support request. Check "My support requests" on your Performance page (or Support page) for details.',
+      { ticketId: ticket.id, subject: ticket.subject },
+      { sendEmail: true, sendSms: false }
+    ).catch((err) => console.error('[Support ticket] Notify failed:', err));
+
     await createAuditLog({
       userId: adminId,
       actionType: 'SUPPORT_TICKET_RESPONDED',
@@ -1168,6 +1234,17 @@ export const updateSupportTicketHandler = wrapAsync(
     const validatedData = updateSupportTicketSchema.parse(req.body);
 
     const ticket = await updateSupportTicket(id, adminId, validatedData);
+
+    if (validatedData.adminResponse !== undefined && validatedData.adminResponse.trim() !== '') {
+      await notifyUser(
+        ticket.userId,
+        'SUPPORT_TICKET_RESPONSE',
+        'Support request updated',
+        'An admin has responded to your support request. Check "My support requests" on your Performance page (or Support page) for details.',
+        { ticketId: ticket.id, subject: ticket.subject },
+        { sendEmail: true, sendSms: false }
+      ).catch((err) => console.error('[Support ticket] Notify failed:', err));
+    }
 
     await createAuditLog({
       userId: adminId,

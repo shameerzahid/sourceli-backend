@@ -271,6 +271,57 @@ export async function getOutstandingBalance(farmerId: string) {
   return await calculateAmountOwed(farmerId);
 }
 
+/**
+ * Farmer confirms receipt of a payment (safe: only sets timestamp, no amount/status change).
+ * Idempotent: if already confirmed, returns current record.
+ */
+export async function confirmPaymentReceiptByFarmer(paymentId: string, farmerId: string) {
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId, farmerId },
+    include: {
+      assignment: {
+        include: {
+          order: {
+            select: {
+              id: true,
+              productType: true,
+              quantity: true,
+              deliveryDate: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!payment) {
+    throw createError('Payment not found or you do not have access to it', 404, 'PAYMENT_NOT_FOUND');
+  }
+
+  if (payment.supplierConfirmedAt) {
+    return payment; // Already confirmed, idempotent
+  }
+
+  return prisma.payment.update({
+    where: { id: paymentId },
+    data: { supplierConfirmedAt: new Date() },
+    include: {
+      assignment: {
+        include: {
+          order: {
+            select: {
+              id: true,
+              productType: true,
+              quantity: true,
+              deliveryDate: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 export interface UpdatePaymentData {
   amountPaid?: number;
   paymentMethod?: PaymentMethod;
