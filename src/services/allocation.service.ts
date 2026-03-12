@@ -53,10 +53,13 @@ export async function getAllocationData() {
     },
   });
 
-  // Get current week start for availability lookup
-  const currentWeekStart = getWeekStartDate();
+  // Get current week start and current month start for availability lookup
+  const now = new Date();
+  const currentWeekStart = getWeekStartDate(now);
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  currentMonthStart.setHours(0, 0, 0, 0);
 
-  // Get all active farmers with their current week availability
+  // Get all active farmers with current week weekly availability AND current month monthly availability
   const farmers = await prisma.farmer.findMany({
     where: {
       user: {
@@ -78,12 +81,18 @@ export async function getAllocationData() {
           weekStartDate: currentWeekStart,
         },
       },
+      monthlyAvailability: {
+        where: {
+          monthStartDate: currentMonthStart,
+        },
+      },
     },
   });
 
-  // Format farmers with availability data
+  // Format farmers with both weekly and monthly availability (so farmers with only monthly show up for allocation)
   const farmersWithAvailability = farmers.map((farmer) => {
-    const availability = farmer.weeklyAvailability || [];
+    const weekly = farmer.weeklyAvailability || [];
+    const monthly = farmer.monthlyAvailability || [];
     return {
       id: farmer.id,
       fullName: farmer.fullName,
@@ -95,13 +104,23 @@ export async function getAllocationData() {
       userStatus: farmer.user.status,
       weeklyCapacityMin: farmer.weeklyCapacityMin,
       weeklyCapacityMax: farmer.weeklyCapacityMax,
-      weeklyAvailability: availability.map((av) => ({
+      weeklyAvailability: weekly.map((av) => ({
         id: av.id,
         productType: av.productType,
         quantityAvailable: av.quantityAvailable,
         avgWeight: av.avgWeight,
         readyDate: av.readyDate.toISOString(),
         isLate: av.isLate,
+        source: 'weekly' as const,
+      })),
+      monthlyAvailability: monthly.map((av) => ({
+        id: av.id,
+        productType: av.productType,
+        quantityAvailable: av.quantityAvailable,
+        avgWeight: av.avgWeight,
+        readyDate: av.readyDate.toISOString(),
+        isLate: av.isLate,
+        source: 'monthly' as const,
       })),
       user: farmer.user,
     };
