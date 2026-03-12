@@ -1,7 +1,7 @@
 import { prisma } from '../config/database.js';
 import { createError } from '../middleware/errorHandler.js';
 import { OrderType, OrderStatus, UserStatus, PaymentMethod } from '@prisma/client';
-import { notifyUser } from './notificationDelivery.service.js';
+import { notifyUser, notifyAdmins } from './notificationDelivery.service.js';
 
 export interface CreateOrderData {
   productType: string;
@@ -421,6 +421,14 @@ export async function updateOrderByBuyer(
     updateData.notes = data.notes?.trim() || null;
   }
 
+  // When buyer submits after modification request: set status back to PENDING and clear modification fields
+  const wasPendingModification = order.status === OrderStatus.PENDING_MODIFICATION;
+  if (wasPendingModification) {
+    updateData.status = OrderStatus.PENDING;
+    updateData.modificationMessage = null;
+    updateData.modificationRequestedAt = null;
+  }
+
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: updateData as any,
@@ -428,6 +436,16 @@ export async function updateOrderByBuyer(
       deliveryAddress: true,
     },
   });
+
+  // Notify all admins that buyer has submitted order changes for review
+  if (wasPendingModification) {
+    await notifyAdmins(
+      'BUYER_SUBMITTED_ORDER_CHANGES',
+      'Buyer submitted order changes',
+      `A buyer has submitted changes to an order that was sent back for modification. Order ID: ${orderId.slice(-8)}. Please review and approve or reject.`,
+      { orderId: updated.id }
+    ).catch((err) => console.error('[Notification]', err));
+  }
 
   return updated;
 }
@@ -826,6 +844,14 @@ export async function updateOrderByAdmin(
     updateData.notes = data.notes?.trim() || null;
   }
 
+  // When admin updates an order that was in PENDING_MODIFICATION: set status back to PENDING and clear modification fields; notify buyer
+  const wasPendingModification = order.status === OrderStatus.PENDING_MODIFICATION;
+  if (wasPendingModification) {
+    updateData.status = OrderStatus.PENDING;
+    updateData.modificationMessage = null;
+    updateData.modificationRequestedAt = null;
+  }
+
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: updateData as any,
@@ -834,6 +860,7 @@ export async function updateOrderByAdmin(
         include: {
           user: {
             select: {
+              id: true,
               email: true,
               phone: true,
               status: true,
@@ -844,6 +871,17 @@ export async function updateOrderByAdmin(
       deliveryAddress: true,
     },
   });
+
+  // Notify buyer that admin has updated their order and it is pending approval again
+  if (wasPendingModification && updated.buyer?.user) {
+    await notifyUser(
+      updated.buyer.user.id,
+      'ADMIN_UPDATED_ORDER',
+      'Admin updated your order',
+      'The admin has updated your order. It is pending approval again. You can view the changes in your order details.',
+      { orderId: updated.id }
+    ).catch((err) => console.error('[Notification]', err));
+  }
 
   return updated;
 }

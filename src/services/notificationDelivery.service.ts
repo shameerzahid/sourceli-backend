@@ -1,3 +1,4 @@
+import { UserRole } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { createNotification, type CreateNotificationData, type NotificationType } from './notification.service.js';
 import { env } from '../config/env.js';
@@ -67,6 +68,30 @@ export async function notifyUser(
   }
 
   return { notificationId: notification.id };
+}
+
+/**
+ * Notify all admin users (in-app + email + SMS per admin).
+ * Use for order-modification flow when buyer submits changes for admin review.
+ */
+export async function notifyAdmins(
+  type: NotificationType | string,
+  title: string,
+  message: string,
+  metadata?: Record<string, unknown>,
+  options: NotifyUserOptions = {}
+): Promise<void> {
+  const admins = await prisma.user.findMany({
+    where: { role: UserRole.ADMIN },
+    select: { id: true },
+  });
+  await Promise.all(
+    admins.map((admin) =>
+      notifyUser(admin.id, type, title, message, metadata, options).catch((err) =>
+        console.error('[Notification] notifyAdmin failed:', admin.id, err)
+      )
+    )
+  );
 }
 
 /**
