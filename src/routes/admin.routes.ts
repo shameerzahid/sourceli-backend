@@ -13,7 +13,11 @@ import {
   rejectBuyerRegistrationHandler,
   createBuyerHandler,
   getAllFarmersHandler,
+  getFarmerByIdHandler,
+  updateFarmerHandler,
   getAllBuyersHandler,
+  getBuyerByIdHandler,
+  updateBuyerHandler,
   updateFarmerStatusHandler,
   updateBuyerStatusHandler,
   getAdminStatsHandler,
@@ -94,9 +98,13 @@ router.post('/buyers/registrations/:id/reject', rejectBuyerRegistrationHandler);
 
 // User Management
 router.get('/farmers', getAllFarmersHandler);
+router.get('/farmers/:id', getFarmerByIdHandler);
+router.patch('/farmers/:id', updateFarmerHandler);
 router.post('/farmers', createSupplierHandler);
 router.put('/farmers/:id/status', updateFarmerStatusHandler);
 router.get('/buyers', getAllBuyersHandler);
+router.get('/buyers/:id', getBuyerByIdHandler);
+router.patch('/buyers/:id', updateBuyerHandler);
 router.post('/buyers', createBuyerHandler);
 router.put('/buyers/:id/status', updateBuyerStatusHandler);
 

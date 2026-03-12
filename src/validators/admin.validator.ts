@@ -86,6 +86,77 @@ export const updateBuyerStatusSchema = z.object({
 });
 
 /**
+ * Schema for admin updating a farmer (all optional; admin can edit anything)
+ */
+export const updateFarmerSchema = z
+  .object({
+    email: z
+      .string()
+      .email('Invalid email format')
+      .refine((val) => isValidEmail(val), { message: 'Invalid email format' })
+      .optional(),
+    phone: z
+      .string()
+      .refine((val) => !val || isValidPhone(val), { message: 'Invalid phone number format' })
+      .optional(),
+    password: z
+      .string()
+      .refine((val) => !val || validatePassword(val).isValid, (val) => ({ message: validatePassword(val).error || 'Invalid password' }))
+      .optional(),
+    fullName: z.string().min(1).max(100).optional(),
+    farmName: z.string().max(100).optional().nullable(),
+    region: z.string().min(1).max(100).optional(),
+    town: z.string().min(1).max(100).optional(),
+    weeklyCapacityMin: z.number().int().min(1).max(100000).optional(),
+    weeklyCapacityMax: z.number().int().min(1).max(100000).optional(),
+    produceCategory: z.string().min(1).max(50).optional(),
+    feedingMethod: z.string().min(1).max(50).optional(),
+    photoUrls: z.array(z.string().url()).max(10).optional(),
+    certificateUrls: z.array(z.string().url()).max(10).optional(),
+  })
+  .refine(
+    (data) =>
+      data.weeklyCapacityMin == null ||
+      data.weeklyCapacityMax == null ||
+      data.weeklyCapacityMax >= data.weeklyCapacityMin,
+    { message: 'Maximum capacity must be >= minimum capacity', path: ['weeklyCapacityMax'] }
+  );
+
+/**
+ * Schema for admin updating a buyer (all optional)
+ */
+const deliveryAddressUpdateSchema = z.object({
+  id: z.string().cuid().optional(),
+  address: z.string().min(1, 'Address is required').max(500),
+  landmark: z.string().max(200).optional().nullable(),
+  region: z.string().max(100).optional().nullable(),
+  isDefault: z.boolean().optional(),
+});
+
+export const updateBuyerSchema = z.object({
+  email: z
+    .string()
+    .email('Invalid email format')
+    .refine((val) => isValidEmail(val), { message: 'Invalid email format' })
+    .optional(),
+  phone: z
+    .string()
+    .refine((val) => !val || isValidPhone(val), { message: 'Invalid phone number format' })
+    .optional(),
+  password: z
+    .string()
+    .refine((val) => !val || validatePassword(val).isValid, (val) => ({ message: validatePassword(val).error || 'Invalid password' }))
+    .optional(),
+  fullName: z.string().min(1).max(100).optional(),
+  businessName: z.string().max(100).optional().nullable(),
+  buyerType: z.enum(['RESTAURANT', 'HOTEL', 'CATERER', 'INDIVIDUAL', 'BUSINESS']).optional(),
+  contactPerson: z.string().min(1).max(200).optional(),
+  estimatedVolume: z.number().int().min(0).optional().nullable(),
+  orderFrequency: z.string().max(50).optional().nullable(),
+  deliveryAddresses: z.array(deliveryAddressUpdateSchema).optional(),
+});
+
+/**
  * Schema for query parameters when listing farmers
  */
 export const listFarmersQuerySchema = z.object({

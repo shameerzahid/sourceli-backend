@@ -12,7 +12,11 @@ import {
   rejectBuyerRegistration,
   createBuyerAsAdmin,
   getAllFarmers,
+  getFarmerById,
   getAllBuyers,
+  getBuyerById,
+  updateFarmer,
+  updateBuyer,
   updateFarmerStatus,
   updateBuyerStatus,
   getAdminStats,
@@ -35,6 +39,8 @@ import {
   rejectBuyerSchema,
   updateFarmerStatusSchema,
   updateBuyerStatusSchema,
+  updateFarmerSchema,
+  updateBuyerSchema,
   listFarmersQuerySchema,
   listBuyersQuerySchema,
   updatePerformanceRulesSchema,
@@ -395,6 +401,36 @@ export const getAllFarmersHandler = wrapAsync(
 );
 
 /**
+ * Get single farmer by ID
+ */
+export const getFarmerByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const farmer = await getFarmerById(id);
+    res.json({
+      success: true,
+      data: farmer,
+    });
+  }
+);
+
+/**
+ * Update farmer (admin edit any field)
+ */
+export const updateFarmerHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const validatedData = updateFarmerSchema.parse(req.body);
+    const farmer = await updateFarmer(id, validatedData);
+    res.json({
+      success: true,
+      message: 'Supplier updated successfully',
+      data: farmer,
+    });
+  }
+);
+
+/**
  * Get all buyers
  */
 export const getAllBuyersHandler = wrapAsync(
@@ -408,6 +444,36 @@ export const getAllBuyersHandler = wrapAsync(
       success: true,
       data: buyers,
       count: buyers.length,
+    });
+  }
+);
+
+/**
+ * Get single buyer by ID
+ */
+export const getBuyerByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const buyer = await getBuyerById(id);
+    res.json({
+      success: true,
+      data: buyer,
+    });
+  }
+);
+
+/**
+ * Update buyer (admin edit any field)
+ */
+export const updateBuyerHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const validatedData = updateBuyerSchema.parse(req.body);
+    const buyer = await updateBuyer(id, validatedData);
+    res.json({
+      success: true,
+      message: 'Buyer updated successfully',
+      data: buyer,
     });
   }
 );

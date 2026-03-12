@@ -822,6 +822,57 @@ export async function getAllFarmers(filters?: {
 }
 
 /**
+ * Get a single farmer by ID (admin)
+ */
+export async function getFarmerById(farmerId: string) {
+  const farmer = await prisma.farmer.findUnique({
+    where: { id: farmerId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+      application: {
+        select: {
+          id: true,
+          status: true,
+          submittedAt: true,
+          reviewedAt: true,
+        },
+      },
+      performance: true,
+      performanceBreakdown: true,
+      farmPhotos: {
+        select: {
+          id: true,
+          filePath: true,
+          fileType: true,
+          uploadedAt: true,
+        },
+      },
+      farmCertificates: {
+        select: {
+          id: true,
+          filePath: true,
+          fileType: true,
+          uploadedAt: true,
+        },
+      },
+    },
+  });
+  if (!farmer) {
+    throw new Error('Farmer not found');
+  }
+  return farmer;
+}
+
+/**
  * Get all buyers with their status
  */
 export async function getAllBuyers(filters?: {
@@ -875,6 +926,246 @@ export async function getAllBuyers(filters?: {
   });
 
   return buyers;
+}
+
+/**
+ * Get a single buyer by ID (admin)
+ */
+export async function getBuyerById(buyerId: string) {
+  const buyer = await prisma.buyer.findUnique({
+    where: { id: buyerId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+      registration: {
+        select: {
+          id: true,
+          status: true,
+          submittedAt: true,
+          reviewedAt: true,
+        },
+      },
+      deliveryAddresses: {
+        select: {
+          id: true,
+          address: true,
+          landmark: true,
+          region: true,
+          isDefault: true,
+        },
+      },
+      buyerDocuments: {
+        select: {
+          id: true,
+          filePath: true,
+          fileType: true,
+          documentType: true,
+          uploadedAt: true,
+        },
+      },
+    },
+  });
+  if (!buyer) {
+    throw new Error('Buyer not found');
+  }
+  return buyer;
+}
+
+/**
+ * Update farmer (admin can edit anything)
+ */
+export async function updateFarmer(
+  farmerId: string,
+  data: {
+    email?: string;
+    phone?: string;
+    password?: string;
+    fullName?: string;
+    farmName?: string | null;
+    region?: string;
+    town?: string;
+    weeklyCapacityMin?: number;
+    weeklyCapacityMax?: number;
+    produceCategory?: string;
+    feedingMethod?: string;
+    photoUrls?: string[];
+    certificateUrls?: string[];
+  }
+) {
+  const farmer = await prisma.farmer.findUnique({
+    where: { id: farmerId },
+    include: { user: true },
+  });
+  if (!farmer) {
+    throw new Error('Farmer not found');
+  }
+
+  const userData: { email?: string; phone?: string; passwordHash?: string } = {};
+  if (data.email != null) userData.email = data.email.trim();
+  if (data.phone != null) {
+    const phoneE164 = toE164(data.phone);
+    if (!phoneE164) throw createError('Invalid phone number format', 400, 'INVALID_PHONE');
+    userData.phone = phoneE164;
+  }
+  if (data.password != null && data.password !== '') {
+    userData.passwordHash = await hashPassword(data.password);
+  }
+
+  const farmerData: Record<string, unknown> = {};
+  if (data.fullName != null) farmerData.fullName = data.fullName.trim();
+  if (data.farmName !== undefined) farmerData.farmName = data.farmName?.trim() || null;
+  if (data.region != null) farmerData.region = data.region.trim();
+  if (data.town != null) farmerData.town = data.town.trim();
+  if (data.weeklyCapacityMin != null) farmerData.weeklyCapacityMin = data.weeklyCapacityMin;
+  if (data.weeklyCapacityMax != null) farmerData.weeklyCapacityMax = data.weeklyCapacityMax;
+  if (data.produceCategory != null) farmerData.produceCategory = data.produceCategory.trim();
+  if (data.feedingMethod != null) farmerData.feedingMethod = data.feedingMethod.trim();
+
+  await prisma.$transaction(async (tx) => {
+    if (Object.keys(userData).length > 0) {
+      await tx.user.update({
+        where: { id: farmer.userId },
+        data: userData,
+      });
+    }
+    if (Object.keys(farmerData).length > 0) {
+      await tx.farmer.update({
+        where: { id: farmerId },
+        data: farmerData,
+      });
+    }
+    if (data.photoUrls != null) {
+      await tx.farmPhoto.deleteMany({ where: { farmerId } });
+      if (data.photoUrls.length > 0) {
+        await tx.farmPhoto.createMany({
+          data: data.photoUrls.map((url) => ({
+            farmerId,
+            filePath: url.trim(),
+            fileType: 'image',
+          })),
+        });
+      }
+    }
+    if (data.certificateUrls != null) {
+      await tx.farmCertificate.deleteMany({ where: { farmerId } });
+      if (data.certificateUrls.length > 0) {
+        await tx.farmCertificate.createMany({
+          data: data.certificateUrls.map((url) => ({
+            farmerId,
+            filePath: url.trim(),
+            fileType: 'image',
+          })),
+        });
+      }
+    }
+  });
+
+  return getFarmerById(farmerId);
+}
+
+/**
+ * Update buyer (admin can edit anything)
+ */
+export async function updateBuyer(
+  buyerId: string,
+  data: {
+    email?: string;
+    phone?: string;
+    password?: string;
+    fullName?: string;
+    businessName?: string | null;
+    buyerType?: string;
+    contactPerson?: string;
+    estimatedVolume?: number | null;
+    orderFrequency?: string | null;
+    deliveryAddresses?: Array<{
+      id?: string;
+      address: string;
+      landmark?: string | null;
+      region?: string | null;
+      isDefault?: boolean;
+    }>;
+  }
+) {
+  const buyer = await prisma.buyer.findUnique({
+    where: { id: buyerId },
+    include: { user: true, deliveryAddresses: true },
+  });
+  if (!buyer) {
+    throw new Error('Buyer not found');
+  }
+
+  const userData: { email?: string; phone?: string; passwordHash?: string } = {};
+  if (data.email != null) userData.email = data.email.trim();
+  if (data.phone != null) {
+    const phoneE164 = toE164(data.phone);
+    if (!phoneE164) throw createError('Invalid phone number format', 400, 'INVALID_PHONE');
+    userData.phone = phoneE164;
+  }
+  if (data.password != null && data.password !== '') {
+    userData.passwordHash = await hashPassword(data.password);
+  }
+
+  const buyerData: Record<string, unknown> = {};
+  if (data.fullName != null) buyerData.fullName = data.fullName.trim();
+  if (data.businessName !== undefined) buyerData.businessName = data.businessName?.trim() || null;
+  if (data.buyerType != null) buyerData.buyerType = data.buyerType;
+  if (data.contactPerson != null) buyerData.contactPerson = data.contactPerson.trim();
+  if (data.estimatedVolume !== undefined) buyerData.estimatedVolume = data.estimatedVolume;
+  if (data.orderFrequency !== undefined) buyerData.orderFrequency = data.orderFrequency;
+
+  if (Object.keys(userData).length > 0) {
+    await prisma.user.update({
+      where: { id: buyer.userId },
+      data: userData,
+    });
+  }
+  if (Object.keys(buyerData).length > 0) {
+    await prisma.buyer.update({
+      where: { id: buyerId },
+      data: buyerData,
+    });
+  }
+
+  if (data.deliveryAddresses != null) {
+    const existingIds = new Set(buyer.deliveryAddresses.map((a) => a.id));
+    const incomingIds = new Set(
+      data.deliveryAddresses.filter((a) => 'id' in a && a.id).map((a) => a.id as string)
+    );
+    const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+    for (const id of toDelete) {
+      await prisma.deliveryAddress.delete({ where: { id } });
+    }
+    for (let i = 0; i < data.deliveryAddresses.length; i++) {
+      const addr = data.deliveryAddresses[i];
+      const payload = {
+        address: addr.address.trim(),
+        landmark: addr.landmark?.trim() || null,
+        region: (addr as { region?: string }).region?.trim() || null,
+        isDefault: addr.isDefault ?? (i === 0),
+      };
+      if (addr.id && existingIds.has(addr.id)) {
+        await prisma.deliveryAddress.update({
+          where: { id: addr.id },
+          data: payload,
+        });
+      } else {
+        await prisma.deliveryAddress.create({
+          data: { buyerId, ...payload },
+        });
+      }
+    }
+  }
+
+  return getBuyerById(buyerId);
 }
 
 /**

@@ -23,6 +23,7 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  updateProfileSchema,
 } from '../validators/auth.validator.js';
 import { wrapAsync } from '../middleware/errorHandler.js';
 import { prisma } from '../config/database.js';
@@ -306,6 +307,7 @@ export const getMeHandler = wrapAsync(
         buyerType: user.buyer.buyerType,
         contactPerson: user.buyer.contactPerson,
         estimatedVolume: user.buyer.estimatedVolume,
+        orderFrequency: user.buyer.orderFrequency ?? null,
         registration: user.buyer.registration
           ? {
               id: user.buyer.registration.id,
@@ -325,6 +327,154 @@ export const getMeHandler = wrapAsync(
       };
     }
 
+    res.status(200).json({
+      success: true,
+      data: profileData,
+    });
+  }
+);
+
+/**
+ * Update current user profile
+ * PATCH /api/auth/me
+ */
+export const updateMeHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!req.user) {
+      throw createError('Authentication required', 401, 'UNAUTHORIZED');
+    }
+    const userId = req.user.userId;
+    const validated = updateProfileSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { farmer: true, buyer: true },
+    });
+    if (!user) {
+      throw createError('User not found', 404, 'USER_NOT_FOUND');
+    }
+
+    if (validated.email !== undefined) {
+      const existing = await prisma.user.findFirst({
+        where: { email: validated.email.trim(), id: { not: userId } },
+      });
+      if (existing) {
+        throw createError('Email already in use', 409, 'DUPLICATE_EMAIL');
+      }
+    }
+    if (validated.phone !== undefined) {
+      const existing = await prisma.user.findFirst({
+        where: { phone: validated.phone.trim(), id: { not: userId } },
+      });
+      if (existing) {
+        throw createError('Phone already in use', 409, 'DUPLICATE_PHONE');
+      }
+    }
+
+    const userUpdate: { email?: string; phone?: string } = {};
+    if (validated.email !== undefined) userUpdate.email = validated.email.trim();
+    if (validated.phone !== undefined) userUpdate.phone = validated.phone.trim();
+    if (Object.keys(userUpdate).length > 0) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: userUpdate,
+      });
+    }
+
+    if (user.role === UserRole.FARMER && user.farmer) {
+      const farmerData: Record<string, unknown> = {};
+      if (validated.fullName !== undefined) farmerData.fullName = validated.fullName.trim();
+      if (validated.farmName !== undefined) farmerData.farmName = validated.farmName?.trim() ?? null;
+      if (validated.region !== undefined) farmerData.region = validated.region.trim();
+      if (validated.town !== undefined) farmerData.town = validated.town.trim();
+      if (validated.weeklyCapacityMin !== undefined) farmerData.weeklyCapacityMin = validated.weeklyCapacityMin;
+      if (validated.weeklyCapacityMax !== undefined) farmerData.weeklyCapacityMax = validated.weeklyCapacityMax;
+      if (validated.produceCategory !== undefined) farmerData.produceCategory = validated.produceCategory.trim();
+      if (validated.feedingMethod !== undefined) farmerData.feedingMethod = validated.feedingMethod.trim();
+      if (Object.keys(farmerData).length > 0) {
+        await prisma.farmer.update({
+          where: { id: user.farmer.id },
+          data: farmerData as any,
+        });
+      }
+    }
+
+    if (user.role === UserRole.BUYER && user.buyer) {
+      const buyerData: Record<string, unknown> = {};
+      if (validated.fullName !== undefined) buyerData.fullName = validated.fullName.trim();
+      if (validated.businessName !== undefined) buyerData.businessName = validated.businessName?.trim() ?? null;
+      if (validated.buyerType !== undefined) buyerData.buyerType = validated.buyerType;
+      if (validated.contactPerson !== undefined) buyerData.contactPerson = validated.contactPerson.trim();
+      if (validated.estimatedVolume !== undefined) buyerData.estimatedVolume = validated.estimatedVolume;
+      if (validated.orderFrequency !== undefined) buyerData.orderFrequency = validated.orderFrequency ?? null;
+      if (Object.keys(buyerData).length > 0) {
+        await prisma.buyer.update({
+          where: { id: user.buyer.id },
+          data: buyerData as any,
+        });
+      }
+    }
+
+    const updated = await getUserProfile(userId);
+    let profileData: any = {
+      id: updated.id,
+      email: updated.email,
+      phone: updated.phone,
+      role: updated.role,
+      status: updated.status,
+      avatarUrl: updated.avatarUrl ?? null,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    };
+    if (updated.role === UserRole.FARMER && updated.farmer) {
+      profileData.farmer = {
+        id: updated.farmer.id,
+        fullName: updated.farmer.fullName,
+        farmName: updated.farmer.farmName,
+        region: updated.farmer.region,
+        town: updated.farmer.town,
+        weeklyCapacityMin: updated.farmer.weeklyCapacityMin,
+        weeklyCapacityMax: updated.farmer.weeklyCapacityMax,
+        produceCategory: updated.farmer.produceCategory,
+        feedingMethod: updated.farmer.feedingMethod,
+        application: updated.farmer.application
+          ? {
+              id: updated.farmer.application.id,
+              status: updated.farmer.application.status,
+              submittedAt: updated.farmer.application.submittedAt,
+              reviewedAt: updated.farmer.application.reviewedAt,
+              rejectionReason: updated.farmer.application.rejectionReason,
+            }
+          : null,
+      };
+    }
+    if (updated.role === UserRole.BUYER && updated.buyer) {
+      profileData.buyer = {
+        id: updated.buyer.id,
+        fullName: updated.buyer.fullName,
+        businessName: updated.buyer.businessName,
+        buyerType: updated.buyer.buyerType,
+        contactPerson: updated.buyer.contactPerson,
+        estimatedVolume: updated.buyer.estimatedVolume,
+        orderFrequency: updated.buyer.orderFrequency ?? null,
+        registration: updated.buyer.registration
+          ? {
+              id: updated.buyer.registration.id,
+              status: updated.buyer.registration.status,
+              submittedAt: updated.buyer.registration.submittedAt,
+              reviewedAt: updated.buyer.registration.reviewedAt,
+              rejectionReason: updated.buyer.registration.rejectionReason,
+            }
+          : null,
+        deliveryAddresses: updated.buyer.deliveryAddresses.map((addr) => ({
+          id: addr.id,
+          address: addr.address,
+          landmark: addr.landmark,
+          isDefault: addr.isDefault,
+          createdAt: addr.createdAt,
+        })),
+      };
+    }
     res.status(200).json({
       success: true,
       data: profileData,

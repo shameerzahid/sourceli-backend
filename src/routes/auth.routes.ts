@@ -4,6 +4,7 @@ import {
   registerBuyerHandler,
   loginHandler,
   getMeHandler,
+  updateMeHandler,
   refreshTokenHandler,
   logoutHandler,
   forgotPasswordHandler,
@@ -52,6 +53,9 @@ router.get('/verify-reset-token/:token', verifyResetTokenHandler);
 
 // Get current user profile
 router.get('/me', authenticate, getMeHandler);
+
+// Update current user profile
+router.patch('/me', authenticate, updateMeHandler);
 
 // Upload profile picture (authenticated)
 router.put('/upload/avatar', authenticate, uploadSingleAvatar, uploadAvatarHandler);

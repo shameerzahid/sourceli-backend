@@ -27,6 +27,7 @@ enum BuyerType {
   HOTEL
   CATERER
   INDIVIDUAL
+  BUSINESS
 }
 
 enum OrderType {

@@ -222,6 +222,47 @@ export const changePasswordSchema = z
     path: ['confirmPassword'],
   });
 
+/**
+ * Update my profile (PATCH /api/auth/me) - partial update for current user
+ */
+const BuyerTypeEnumFull = z.enum(['RESTAURANT', 'HOTEL', 'CATERER', 'INDIVIDUAL', 'BUSINESS']);
+export const updateProfileSchema = z
+  .object({
+    email: z
+      .string()
+      .email('Invalid email format')
+      .refine((val) => isValidEmail(val), { message: 'Invalid email format' })
+      .optional(),
+    phone: z
+      .string()
+      .refine((val) => isValidPhone(val), { message: 'Invalid phone number format' })
+      .optional(),
+    fullName: z.string().min(1).max(100).optional(),
+    farmName: z.string().max(100).optional().nullable(),
+    region: z.string().min(1).max(100).optional(),
+    town: z.string().min(1).max(100).optional(),
+    weeklyCapacityMin: z.number().int().min(1).max(100000).optional(),
+    weeklyCapacityMax: z.number().int().min(1).max(100000).optional(),
+    produceCategory: z.string().min(1).max(50).optional(),
+    feedingMethod: z.string().min(1).max(50).optional(),
+    businessName: z.string().max(100).optional().nullable(),
+    buyerType: BuyerTypeEnumFull.optional(),
+    contactPerson: z.string().min(1).max(100).optional(),
+    estimatedVolume: z.number().int().min(1).max(100000).optional().nullable(),
+    orderFrequency: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY', 'AS_NEEDED']).optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      if (data.weeklyCapacityMin != null && data.weeklyCapacityMax != null) {
+        return data.weeklyCapacityMax >= data.weeklyCapacityMin;
+      }
+      return true;
+    },
+    { message: 'Maximum capacity must be >= minimum capacity', path: ['weeklyCapacityMax'] }
+  );
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
 // Type exports for use in controllers
 export type FarmerRegistrationInput = z.infer<typeof farmerRegistrationSchema>;
 export type BuyerRegistrationInput = z.infer<typeof buyerRegistrationSchema>;
