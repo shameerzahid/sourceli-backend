@@ -469,8 +469,11 @@ export async function createDeliveryAssignmentByAdmin(
     );
   }
 
-  const totalAssigned =
-    order.assignments.reduce((sum, a) => sum + a.assignedQuantity, 0) + data.assignedQuantity;
+  // Only count non-cancelled assignments so cancelled quantity can be re-assigned
+  const activeAssigned = order.assignments
+    .filter((a) => a.status !== AssignmentStatus.CANCELLED)
+    .reduce((sum, a) => sum + a.assignedQuantity, 0);
+  const totalAssigned = activeAssigned + data.assignedQuantity;
   if (totalAssigned > order.quantity) {
     throw createError(
       `Total assigned quantity (${totalAssigned}) would exceed order quantity (${order.quantity})`,
