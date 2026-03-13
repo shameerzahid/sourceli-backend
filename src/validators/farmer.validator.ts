@@ -16,6 +16,11 @@ export const weeklyAvailabilitySchema = z.object({
     .number()
     .positive('Average weight must be positive')
     .optional(),
+  pricePerUnit: z
+    .number()
+    .positive('Price per unit must be positive')
+    .optional()
+    .nullable(),
   readyDate: z
     .string()
     .datetime('Ready date must be a valid date')
@@ -43,6 +48,11 @@ export const weeklyAvailabilityUpdateSchema = z
       .positive('Average weight must be positive')
       .optional()
       .nullable(),
+    pricePerUnit: z
+      .number()
+      .positive('Price per unit must be positive')
+      .optional()
+      .nullable(),
     readyDate: z
       .string()
       .datetime('Ready date must be a valid date')
@@ -57,8 +67,9 @@ export const weeklyAvailabilityUpdateSchema = z
     (data) =>
       data.quantityAvailable !== undefined ||
       data.avgWeight !== undefined ||
-      data.readyDate !== undefined,
-    { message: 'At least one field (quantityAvailable, avgWeight, readyDate) is required' }
+      data.readyDate !== undefined ||
+      data.pricePerUnit !== undefined,
+    { message: 'At least one field (quantityAvailable, avgWeight, pricePerUnit, or readyDate) is required' }
   );
 
 export type WeeklyAvailabilityUpdateInput = z.infer<typeof weeklyAvailabilityUpdateSchema>;
@@ -79,6 +90,11 @@ export const monthlyAvailabilitySchema = z.object({
     .number()
     .positive('Average weight must be positive')
     .optional(),
+  pricePerUnit: z
+    .number()
+    .positive('Price per unit must be positive')
+    .optional()
+    .nullable(),
   readyDate: z
     .string()
     .datetime('Ready date must be a valid date')
@@ -106,6 +122,11 @@ export const monthlyAvailabilityUpdateSchema = z
       .positive('Average weight must be positive')
       .optional()
       .nullable(),
+    pricePerUnit: z
+      .number()
+      .positive('Price per unit must be positive')
+      .optional()
+      .nullable(),
     readyDate: z
       .string()
       .datetime('Ready date must be a valid date')
@@ -120,8 +141,9 @@ export const monthlyAvailabilityUpdateSchema = z
     (data) =>
       data.quantityAvailable !== undefined ||
       data.avgWeight !== undefined ||
-      data.readyDate !== undefined,
-    { message: 'At least one field (quantityAvailable, avgWeight, readyDate) is required' }
+      data.readyDate !== undefined ||
+      data.pricePerUnit !== undefined,
+    { message: 'At least one field (quantityAvailable, avgWeight, pricePerUnit, or readyDate) is required' }
   );
 
 export type MonthlyAvailabilityUpdateInput = z.infer<typeof monthlyAvailabilityUpdateSchema>;

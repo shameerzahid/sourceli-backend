@@ -302,6 +302,7 @@ model WeeklyAvailability {
   productType       String   @map("product_type")
   quantityAvailable Int      @map("quantity_available")
   avgWeight         Float?   @map("avg_weight")
+  pricePerUnit      Float?   @map("price_per_unit") // Within admin min/max band
   readyDate         DateTime @map("ready_date")
   submittedAt       DateTime @default(now()) @map("submitted_at")
   isLate            Boolean  @default(false) @map("is_late")
@@ -322,6 +323,7 @@ model MonthlyAvailability {
   productType       String   @map("product_type")
   quantityAvailable Int      @map("quantity_available")
   avgWeight         Float?   @map("avg_weight")
+  pricePerUnit      Float?   @map("price_per_unit") // Within admin min/max band
   readyDate         DateTime @map("ready_date")
   submittedAt       DateTime @default(now()) @map("submitted_at")
   isLate            Boolean  @default(false) @map("is_late")

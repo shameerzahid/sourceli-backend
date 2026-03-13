@@ -1,7 +1,8 @@
 import { prisma } from '../config/database.js';
-import { getWeekStartDate, isWithinSubmissionWindow, isLateSubmission } from '../utils/weekCalculation.js';
+import { getWeekStartDate, getWeekEndDate, isWithinSubmissionWindow, isLateSubmission } from '../utils/weekCalculation.js';
 import {
   getMonthStartDate,
+  getMonthEndDate,
   isWithinMonthlySubmissionWindow,
   isLateMonthlySubmission,
 } from '../utils/monthCalculation.js';
@@ -12,6 +13,7 @@ export interface SubmitAvailabilityData {
   productType: string;
   quantityAvailable: number;
   avgWeight?: number;
+  pricePerUnit?: number | null;
   readyDate: Date;
 }
 
@@ -60,13 +62,50 @@ export async function submitWeeklyAvailability(
     );
   }
 
-  // Validate ready date is in the future
+  // Validate ready date is in the future and within current week
   if (data.readyDate <= new Date()) {
     throw createError(
       'Ready date must be in the future',
       400,
       'INVALID_READY_DATE'
     );
+  }
+  const weekEndDate = getWeekEndDate();
+  if (data.readyDate < weekStartDate || data.readyDate > weekEndDate) {
+    throw createError(
+      'Ready date must be within the current week (Monday–Sunday)',
+      400,
+      'INVALID_READY_DATE'
+    );
+  }
+
+  // Validate price per unit against category pricing band (admin min/max)
+  const category = await prisma.produceCategory.findUnique({
+    where: { name: data.productType.trim() },
+  });
+  const hasBand = category && (category.minPrice != null || category.maxPrice != null);
+  if (hasBand) {
+    if (data.pricePerUnit == null || data.pricePerUnit <= 0) {
+      throw createError(
+        'Price per unit is required and must be within the admin-set range for this product',
+        400,
+        'PRICE_REQUIRED'
+      );
+    }
+    if (category!.minPrice != null && data.pricePerUnit < category!.minPrice) {
+      throw createError(
+        `Price per unit must be at least ${category!.minPrice}`,
+        400,
+        'PRICE_BELOW_MIN'
+      );
+    }
+    if (category!.maxPrice != null && data.pricePerUnit > category!.maxPrice) {
+      throw createError(
+        `Price per unit must not exceed ${category!.maxPrice}`,
+        400,
+        'PRICE_ABOVE_MAX'
+      );
+    }
   }
 
   // Create availability record
@@ -77,6 +116,7 @@ export async function submitWeeklyAvailability(
       productType: data.productType.trim(),
       quantityAvailable: data.quantityAvailable,
       avgWeight: data.avgWeight,
+      pricePerUnit: data.pricePerUnit ?? undefined,
       readyDate: data.readyDate,
       isLate,
     },
@@ -200,6 +240,42 @@ export async function submitMonthlyAvailability(
       'INVALID_READY_DATE'
     );
   }
+  const monthEndDate = getMonthEndDate();
+  if (data.readyDate < monthStartDate || data.readyDate > monthEndDate) {
+    throw createError(
+      'Ready date must be within the current month',
+      400,
+      'INVALID_READY_DATE'
+    );
+  }
+
+  const category = await prisma.produceCategory.findUnique({
+    where: { name: data.productType.trim() },
+  });
+  const hasBand = category && (category.minPrice != null || category.maxPrice != null);
+  if (hasBand) {
+    if (data.pricePerUnit == null || data.pricePerUnit <= 0) {
+      throw createError(
+        'Price per unit is required and must be within the admin-set range for this product',
+        400,
+        'PRICE_REQUIRED'
+      );
+    }
+    if (category!.minPrice != null && data.pricePerUnit < category!.minPrice) {
+      throw createError(
+        `Price per unit must be at least ${category!.minPrice}`,
+        400,
+        'PRICE_BELOW_MIN'
+      );
+    }
+    if (category!.maxPrice != null && data.pricePerUnit > category!.maxPrice) {
+      throw createError(
+        `Price per unit must not exceed ${category!.maxPrice}`,
+        400,
+        'PRICE_ABOVE_MAX'
+      );
+    }
+  }
 
   const availability = await prisma.monthlyAvailability.create({
     data: {
@@ -208,6 +284,7 @@ export async function submitMonthlyAvailability(
       productType: data.productType.trim(),
       quantityAvailable: data.quantityAvailable,
       avgWeight: data.avgWeight,
+      pricePerUnit: data.pricePerUnit ?? undefined,
       readyDate: data.readyDate,
       isLate,
     },
@@ -325,12 +402,51 @@ export async function updateMonthlyAvailability(
         'INVALID_READY_DATE'
       );
     }
+    const monthEnd = getMonthEndDate(existing.monthStartDate);
+    if (data.readyDate < existing.monthStartDate || data.readyDate > monthEnd) {
+      throw createError(
+        'Ready date must be within the month for this availability',
+        400,
+        'INVALID_READY_DATE'
+      );
+    }
     updateData.readyDate = data.readyDate;
+  }
+
+  if (data.pricePerUnit !== undefined) {
+    const category = await prisma.produceCategory.findUnique({
+      where: { name: existing.productType },
+    });
+    const hasBand = category && (category.minPrice != null || category.maxPrice != null);
+    if (hasBand && (data.pricePerUnit == null || data.pricePerUnit <= 0)) {
+      throw createError(
+        'Price per unit is required and must be within the admin-set range for this product',
+        400,
+        'PRICE_REQUIRED'
+      );
+    }
+    if (data.pricePerUnit != null && data.pricePerUnit > 0) {
+      if (category?.minPrice != null && data.pricePerUnit < category.minPrice) {
+        throw createError(
+          `Price per unit must be at least ${category.minPrice}`,
+          400,
+          'PRICE_BELOW_MIN'
+        );
+      }
+      if (category?.maxPrice != null && data.pricePerUnit > category.maxPrice) {
+        throw createError(
+          `Price per unit must not exceed ${category.maxPrice}`,
+          400,
+          'PRICE_ABOVE_MAX'
+        );
+      }
+    }
+    updateData.pricePerUnit = data.pricePerUnit;
   }
 
   if (Object.keys(updateData).length === 0) {
     throw createError(
-      'Provide at least one field to update (quantityAvailable, avgWeight, or readyDate)',
+      'Provide at least one field to update (quantityAvailable, avgWeight, pricePerUnit, or readyDate)',
       400,
       'NO_CHANGES'
     );
@@ -381,6 +497,7 @@ export async function deleteMonthlyAvailability(
 export interface UpdateAvailabilityData {
   quantityAvailable?: number;
   avgWeight?: number | null;
+  pricePerUnit?: number | null;
   readyDate?: Date;
 }
 
@@ -439,12 +556,51 @@ export async function updateWeeklyAvailability(
         'INVALID_READY_DATE'
       );
     }
+    const weekEnd = getWeekEndDate(existing.weekStartDate);
+    if (data.readyDate < existing.weekStartDate || data.readyDate > weekEnd) {
+      throw createError(
+        'Ready date must be within the week (Monday–Sunday) for this availability',
+        400,
+        'INVALID_READY_DATE'
+      );
+    }
     updateData.readyDate = data.readyDate;
+  }
+
+  if (data.pricePerUnit !== undefined) {
+    const category = await prisma.produceCategory.findUnique({
+      where: { name: existing.productType },
+    });
+    const hasBand = category && (category.minPrice != null || category.maxPrice != null);
+    if (hasBand && (data.pricePerUnit == null || data.pricePerUnit <= 0)) {
+      throw createError(
+        'Price per unit is required and must be within the admin-set range for this product',
+        400,
+        'PRICE_REQUIRED'
+      );
+    }
+    if (data.pricePerUnit != null && data.pricePerUnit > 0) {
+      if (category?.minPrice != null && data.pricePerUnit < category.minPrice) {
+        throw createError(
+          `Price per unit must be at least ${category.minPrice}`,
+          400,
+          'PRICE_BELOW_MIN'
+        );
+      }
+      if (category?.maxPrice != null && data.pricePerUnit > category.maxPrice) {
+        throw createError(
+          `Price per unit must not exceed ${category.maxPrice}`,
+          400,
+          'PRICE_ABOVE_MAX'
+        );
+      }
+    }
+    updateData.pricePerUnit = data.pricePerUnit;
   }
 
   if (Object.keys(updateData).length === 0) {
     throw createError(
-      'Provide at least one field to update (quantityAvailable, avgWeight, or readyDate)',
+      'Provide at least one field to update (quantityAvailable, avgWeight, pricePerUnit, or readyDate)',
       400,
       'NO_CHANGES'
     );
