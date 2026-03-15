@@ -17,11 +17,13 @@ import {
   updateFarmerHandler,
   getAllBuyersHandler,
   getBuyerByIdHandler,
+  getBuyerOrdersHandler,
   updateBuyerHandler,
   updateFarmerStatusHandler,
   updateBuyerStatusHandler,
   getAdminStatsHandler,
   getPendingOrdersHandler,
+  getOrderByIdHandler,
   approveOrderHandler,
   rejectOrderHandler,
   requestOrderModificationHandler,
@@ -103,6 +105,7 @@ router.patch('/farmers/:id', updateFarmerHandler);
 router.post('/farmers', createSupplierHandler);
 router.put('/farmers/:id/status', updateFarmerStatusHandler);
 router.get('/buyers', getAllBuyersHandler);
+router.get('/buyers/:id/orders', getBuyerOrdersHandler);
 router.get('/buyers/:id', getBuyerByIdHandler);
 router.patch('/buyers/:id', updateBuyerHandler);
 router.post('/buyers', createBuyerHandler);
@@ -110,6 +113,7 @@ router.put('/buyers/:id/status', updateBuyerStatusHandler);
 
 // Order Management
 router.get('/orders/pending', getPendingOrdersHandler);
+router.get('/orders/:id', getOrderByIdHandler);
 router.post('/orders', createOrderHandler);
 router.patch('/orders/:id', updateOrderHandler);
 router.delete('/orders/:id', deleteOrderHandler);

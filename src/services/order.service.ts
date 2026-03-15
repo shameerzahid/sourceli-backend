@@ -451,13 +451,14 @@ export async function updateOrderByBuyer(
 }
 
 /**
- * Get all pending orders (for admin)
+ * Get all pending orders and orders ready to allocate (for admin orders page)
+ * Includes: PENDING, PENDING_MODIFICATION (to review/approve), ALLOCATION (ready to allocate)
  */
 export async function getPendingOrders() {
   const orders = await prisma.order.findMany({
     where: {
       status: {
-        in: [OrderStatus.PENDING, OrderStatus.PENDING_MODIFICATION],
+        in: [OrderStatus.PENDING, OrderStatus.PENDING_MODIFICATION, OrderStatus.ALLOCATION],
       },
     },
     include: {
@@ -488,6 +489,73 @@ export async function getPendingOrders() {
   });
 
   return orders;
+}
+
+/**
+ * Get all orders for a buyer by buyer entity id (admin). Any status.
+ */
+export async function getOrdersByBuyerIdForAdmin(buyerId: string) {
+  const orders = await prisma.order.findMany({
+    where: { buyerId },
+    include: {
+      buyer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+              status: true,
+            },
+          },
+          deliveryAddresses: {
+            select: {
+              id: true,
+              address: true,
+              landmark: true,
+              isDefault: true,
+            },
+          },
+        },
+      },
+      deliveryAddress: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+  return orders;
+}
+
+/**
+ * Get a single order by ID for admin (any status) – so reviewed/approved/delivered orders can still be viewed.
+ */
+export async function getOrderByIdForAdmin(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      buyer: {
+        include: {
+          user: {
+            select: {
+              email: true,
+              phone: true,
+              status: true,
+            },
+          },
+          deliveryAddresses: {
+            select: {
+              id: true,
+              address: true,
+              landmark: true,
+              isDefault: true,
+            },
+          },
+        },
+      },
+      deliveryAddress: true,
+    },
+  });
+  return order;
 }
 
 /**

@@ -25,6 +25,8 @@ import {
 } from '../services/admin.service.js';
 import {
   getPendingOrders,
+  getOrderByIdForAdmin,
+  getOrdersByBuyerIdForAdmin,
   approveOrder,
   rejectOrder,
   requestOrderModification,
@@ -463,6 +465,21 @@ export const getBuyerByIdHandler = wrapAsync(
 );
 
 /**
+ * Get all orders for a buyer (admin)
+ */
+export const getBuyerOrdersHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id: buyerId } = req.params;
+    const orders = await getOrdersByBuyerIdForAdmin(buyerId);
+    res.json({
+      success: true,
+      data: orders,
+      count: orders.length,
+    });
+  }
+);
+
+/**
  * Update buyer (admin edit any field)
  */
 export const updateBuyerHandler = wrapAsync(
@@ -588,6 +605,27 @@ export const getPendingOrdersHandler = wrapAsync(
       success: true,
       data: orders,
       count: orders.length,
+    });
+  }
+);
+
+/**
+ * Get a single order by ID (admin, any status)
+ */
+export const getOrderByIdHandler = wrapAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const order = await getOrderByIdForAdmin(id);
+    if (!order) {
+      res.status(404).json({
+        success: false,
+        message: 'Order not found',
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      data: order,
     });
   }
 );
