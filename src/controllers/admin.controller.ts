@@ -216,6 +216,7 @@ export const createSupplierHandler = wrapAsync(
       termsAccepted: validatedData.termsAccepted ?? true,
       photoUrls: validatedData.photoUrls,
       certificateUrls: validatedData.certificateUrls,
+      avatarUrl: validatedData.avatarUrl?.trim(),
     };
 
     const result = await createSupplierAsAdmin(adminId, createData);
@@ -368,6 +369,7 @@ export const createBuyerHandler = wrapAsync(
         region: addr.region?.trim(),
         isDefault: addr.isDefault,
       })),
+      avatarUrl: validatedData.avatarUrl?.trim(),
     };
 
     const result = await createBuyerAsAdmin(adminId, createData);

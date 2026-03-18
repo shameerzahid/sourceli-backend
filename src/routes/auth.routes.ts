@@ -12,6 +12,7 @@ import {
   verifyResetTokenHandler,
   changePasswordHandler,
   uploadFarmPhotoHandler,
+  uploadRegisterProfilePhotoHandler,
   uploadAvatarHandler,
 } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.js';
@@ -25,6 +26,13 @@ const router = Router();
 
 // Single farm photo upload (for upload-on-add during registration). Returns { url }.
 router.post('/upload/farm-photo', uploadSingleFarmPhoto, uploadFarmPhotoHandler);
+
+// Profile photo during registration (no auth). Returns { url }.
+router.post(
+  '/upload/register-profile-photo',
+  uploadSingleFarmPhoto,
+  uploadRegisterProfilePhotoHandler
+);
 
 // Farmer registration: multipart (with photos) or JSON (with pre-uploaded photoUrls)
 router.post(

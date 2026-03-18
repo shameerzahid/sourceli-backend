@@ -58,6 +58,29 @@ export const uploadFarmPhotoHandler = wrapAsync(
 );
 
 /**
+ * Profile picture during registration (farmer/buyer). No auth. Images only.
+ * POST /api/auth/upload/register-profile-photo — field "photo"
+ */
+export const uploadRegisterProfilePhotoHandler = wrapAsync(
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const file = req.file;
+    if (!file) {
+      throw createError('No file provided. Send one image as multipart field "photo".', 400, 'PHOTO_REQUIRED');
+    }
+    validateImageFile(file);
+    const uploadResult = await uploadImageToCloudinary(
+      file.buffer,
+      'avatars',
+      `register-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    );
+    res.status(200).json({
+      success: true,
+      url: uploadResult.secureUrl,
+    });
+  }
+);
+
+/**
  * Upload current user's profile picture (avatar).
  * PUT /api/auth/upload/avatar
  * Accepts multipart/form-data with single file field "avatar". Requires auth. Returns { url }.
@@ -163,6 +186,7 @@ export const registerFarmerHandler = wrapAsync(
       termsAccepted: validatedData.termsAccepted,
       photoUrls,
       certificateUrls: certificateUrls.length > 0 ? certificateUrls : undefined,
+      avatarUrl: validatedData.avatarUrl?.trim() || undefined,
     };
 
     // Register farmer
@@ -207,6 +231,7 @@ export const registerBuyerHandler = wrapAsync(
         landmark: addr.landmark?.trim(),
         isDefault: addr.isDefault,
       })),
+      avatarUrl: validatedData.avatarUrl?.trim() || undefined,
     };
 
     // Register buyer

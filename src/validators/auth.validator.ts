@@ -63,6 +63,7 @@ export const farmerRegistrationSchema = z
     photoUrls: z.array(z.string().url()).min(1).max(10).optional(),
     // Certificates: optional, 0–10 URLs
     certificateUrls: z.array(z.string().url()).max(10).optional(),
+    avatarUrl: z.string().url().optional(),
   })
   .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
     message: 'Maximum capacity must be greater than or equal to minimum capacity',
@@ -131,6 +132,7 @@ export const buyerRegistrationSchema = z.object({
     )
     .min(1, 'At least one delivery address is required')
     .max(10, 'Maximum 10 delivery addresses allowed'),
+  avatarUrl: z.string().url().optional(),
 });
 
 /**

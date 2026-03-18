@@ -26,6 +26,7 @@ export interface FarmerRegistrationData {
   termsAccepted: boolean; // Platform rules agreement
   photoUrls?: string[]; // Cloudinary URLs for farm photos
   certificateUrls?: string[]; // Cloudinary URLs for farm certificates
+  avatarUrl?: string | null;
 }
 
 export interface BuyerRegistrationData {
@@ -46,6 +47,7 @@ export interface BuyerRegistrationData {
   }[];
   companyRegistrationUrls?: string[];
   supportingDocUrls?: string[];
+  avatarUrl?: string | null;
 }
 
 // Login DTOs
@@ -106,6 +108,7 @@ export async function registerFarmer(
         passwordHash,
         role: UserRole.FARMER,
         status: UserStatus.APPLIED, // Starts as APPLIED, needs admin approval
+        avatarUrl: data.avatarUrl?.trim() || null,
       },
     });
 
@@ -201,6 +204,7 @@ export async function registerBuyer(
         passwordHash,
         role: UserRole.BUYER,
         status: UserStatus.PENDING, // Starts as PENDING, needs admin approval
+        avatarUrl: data.avatarUrl?.trim() || null,
       },
     });
 

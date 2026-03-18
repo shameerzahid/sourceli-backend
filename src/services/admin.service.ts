@@ -42,6 +42,7 @@ export async function getPendingFarmerApplications() {
               phone: true,
               status: true,
               createdAt: true,
+              avatarUrl: true,
             },
           },
           farmPhotos: {
@@ -89,6 +90,7 @@ export async function getFarmerApplicationById(applicationId: string) {
               phone: true,
               status: true,
               createdAt: true,
+              avatarUrl: true,
             },
           },
           farmPhotos: {
@@ -264,6 +266,7 @@ export async function getPendingBuyerRegistrations() {
               phone: true,
               status: true,
               createdAt: true,
+              avatarUrl: true,
             },
           },
           deliveryAddresses: {
@@ -313,6 +316,7 @@ export async function getBuyerRegistrationById(registrationId: string) {
               phone: true,
               status: true,
               createdAt: true,
+              avatarUrl: true,
             },
           },
           deliveryAddresses: {
@@ -487,6 +491,7 @@ export interface CreateSupplierAsAdminData {
   termsAccepted?: boolean;
   photoUrls?: string[];
   certificateUrls?: string[];
+  avatarUrl?: string | null;
 }
 
 /**
@@ -527,6 +532,7 @@ export async function createSupplierAsAdmin(
         passwordHash,
         role: UserRole.FARMER,
         status: UserStatus.PROBATIONARY,
+        avatarUrl: data.avatarUrl?.trim() || null,
       },
     });
 
@@ -630,6 +636,7 @@ export interface CreateBuyerAsAdminData {
     region?: string;
     isDefault?: boolean;
   }[];
+  avatarUrl?: string | null;
 }
 
 /**
@@ -670,6 +677,7 @@ export async function createBuyerAsAdmin(
         passwordHash,
         role: UserRole.BUYER,
         status: UserStatus.ACTIVE,
+        avatarUrl: data.avatarUrl?.trim() || null,
       },
     });
 
@@ -835,6 +843,7 @@ export async function getFarmerById(farmerId: string) {
           email: true,
           phone: true,
           status: true,
+          avatarUrl: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -943,6 +952,7 @@ export async function getBuyerById(buyerId: string) {
           email: true,
           phone: true,
           status: true,
+          avatarUrl: true,
           createdAt: true,
           updatedAt: true,
         },

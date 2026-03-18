@@ -31,6 +31,7 @@ export const createSupplierSchema = z
     termsAccepted: z.boolean().optional(),
     photoUrls: z.array(z.string().url()).max(10).optional(),
     certificateUrls: z.array(z.string().url()).max(10).optional(),
+    avatarUrl: z.string().url().optional(),
   })
   .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
     message: 'Maximum capacity must be greater than or equal to minimum capacity',
