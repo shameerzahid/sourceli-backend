@@ -1,6 +1,31 @@
 import { z } from 'zod';
 import { UserStatus, PerformanceTier } from '@prisma/client';
 import { isValidEmail, isValidPhone, validatePassword } from '../utils/validation.js';
+import { GHANA_CARD_FIELD_KEYS } from '../utils/ghanaCardFields.js';
+
+const ghanaTrimmedRequired = (fieldLabel: string, maxLen: number) =>
+  z
+    .string()
+    .transform((s) => s.trim())
+    .pipe(z.string().min(1, `${fieldLabel} is required`).max(maxLen, `${fieldLabel} is too long`));
+
+const ghanaCardCreateFields = {
+  ghanaCardId: ghanaTrimmedRequired('Ghana Card ID', 200),
+  ghanaCardPersonalNumber: ghanaTrimmedRequired('Ghana Card personal ID number (PIN)', 200),
+  ghanaCardDocumentNumber: ghanaTrimmedRequired('Ghana Card document number', 200),
+  ghanaCardPlaceOfIssuance: ghanaTrimmedRequired('Ghana Card place of issuance', 200),
+  ghanaCardDateOfIssuance: ghanaTrimmedRequired('Ghana Card date of issuance', 100),
+  ghanaCardDateOfExpiry: ghanaTrimmedRequired('Ghana Card date of expiry', 100),
+};
+
+const ghanaCardPatchFields = {
+  ghanaCardId: z.string().max(200).optional().nullable(),
+  ghanaCardPersonalNumber: z.string().max(200).optional().nullable(),
+  ghanaCardDocumentNumber: z.string().max(200).optional().nullable(),
+  ghanaCardPlaceOfIssuance: z.string().max(200).optional().nullable(),
+  ghanaCardDateOfIssuance: z.string().max(100).optional().nullable(),
+  ghanaCardDateOfExpiry: z.string().max(100).optional().nullable(),
+};
 
 /**
  * Schema for admin creating a supplier (same as farmer registration but photoUrls optional 0-10, termsAccepted optional)
@@ -32,6 +57,7 @@ export const createSupplierSchema = z
     photoUrls: z.array(z.string().url()).max(10).optional(),
     certificateUrls: z.array(z.string().url()).max(10).optional(),
     avatarUrl: z.string().url().optional(),
+    ...ghanaCardCreateFields,
   })
   .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
     message: 'Maximum capacity must be greater than or equal to minimum capacity',
@@ -114,6 +140,7 @@ export const updateFarmerSchema = z
     feedingMethod: z.string().min(1).max(50).optional(),
     photoUrls: z.array(z.string().url()).max(10).optional(),
     certificateUrls: z.array(z.string().url()).max(10).optional(),
+    ...ghanaCardPatchFields,
   })
   .refine(
     (data) =>
@@ -121,7 +148,33 @@ export const updateFarmerSchema = z
       data.weeklyCapacityMax == null ||
       data.weeklyCapacityMax >= data.weeklyCapacityMin,
     { message: 'Maximum capacity must be >= minimum capacity', path: ['weeklyCapacityMax'] }
-  );
+  )
+  .superRefine((data, ctx) => {
+    const d = data as Record<string, unknown>;
+    const coreTouched = [
+      'email',
+      'phone',
+      'fullName',
+      'farmName',
+      'region',
+      'town',
+      'weeklyCapacityMin',
+      'weeklyCapacityMax',
+      'produceCategory',
+      'feedingMethod',
+    ].some((k) => d[k] !== undefined);
+    if (!coreTouched) return;
+    for (const k of GHANA_CARD_FIELD_KEYS) {
+      const v = d[k];
+      if (v == null || (typeof v === 'string' && v.trim() === '')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Ghana Card details are required when updating profile fields',
+          path: [k],
+        });
+      }
+    }
+  });
 
 /**
  * Schema for admin updating a buyer (all optional)
@@ -155,7 +208,32 @@ export const updateBuyerSchema = z.object({
   estimatedVolume: z.number().int().min(0).optional().nullable(),
   orderFrequency: z.string().max(50).optional().nullable(),
   deliveryAddresses: z.array(deliveryAddressUpdateSchema).optional(),
-});
+  ...ghanaCardPatchFields,
+})
+  .superRefine((data, ctx) => {
+    const d = data as Record<string, unknown>;
+    const coreTouched = [
+      'email',
+      'phone',
+      'fullName',
+      'businessName',
+      'buyerType',
+      'contactPerson',
+      'estimatedVolume',
+      'orderFrequency',
+    ].some((k) => d[k] !== undefined);
+    if (!coreTouched) return;
+    for (const k of GHANA_CARD_FIELD_KEYS) {
+      const v = d[k];
+      if (v == null || (typeof v === 'string' && v.trim() === '')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Ghana Card details are required when updating profile fields',
+          path: [k],
+        });
+      }
+    }
+  });
 
 /**
  * Schema for query parameters when listing farmers

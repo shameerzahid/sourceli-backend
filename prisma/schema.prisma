@@ -124,6 +124,14 @@ model Farmer {
   verificationDate    DateTime? @map("verification_date")
   verificationAdminId String?   @map("verification_admin_id")
 
+  // Ghana Card (optional; date fields stored as String for flexible display formats)
+  ghanaCardId               String? @map("ghana_card_id")
+  ghanaCardPersonalNumber   String? @map("ghana_card_personal_number")
+  ghanaCardDocumentNumber   String? @map("ghana_card_document_number")
+  ghanaCardPlaceOfIssuance  String? @map("ghana_card_place_of_issuance")
+  ghanaCardDateOfIssuance   String? @map("ghana_card_date_of_issuance")
+  ghanaCardDateOfExpiry     String? @map("ghana_card_date_of_expiry")
+
   user                 User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   application          FarmerApplication?
   farmPhotos           FarmPhoto[]
@@ -154,6 +162,14 @@ model Buyer {
   orderFrequency      String?   @map("order_frequency") // WEEKLY | BIWEEKLY | MONTHLY | AS_NEEDED
   verificationDate    DateTime? @map("verification_date")
   verificationAdminId String?   @map("verification_admin_id")
+
+  // Ghana Card (optional; date fields stored as String for flexible display formats)
+  ghanaCardId               String? @map("ghana_card_id")
+  ghanaCardPersonalNumber   String? @map("ghana_card_personal_number")
+  ghanaCardDocumentNumber   String? @map("ghana_card_document_number")
+  ghanaCardPlaceOfIssuance  String? @map("ghana_card_place_of_issuance")
+  ghanaCardDateOfIssuance   String? @map("ghana_card_date_of_issuance")
+  ghanaCardDateOfExpiry     String? @map("ghana_card_date_of_expiry")
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   registration      BuyerRegistration?

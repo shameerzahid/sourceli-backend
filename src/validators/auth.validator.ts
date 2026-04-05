@@ -1,8 +1,33 @@
 import { z } from 'zod';
 import { isValidEmail, isValidPhone, validatePassword } from '../utils/validation.js';
+import { GHANA_CARD_FIELD_KEYS } from '../utils/ghanaCardFields.js';
 
 // Buyer type enum
 const BuyerTypeEnum = z.enum(['RESTAURANT', 'HOTEL', 'CATERER', 'INDIVIDUAL']);
+
+const ghanaTrimmedRequired = (fieldLabel: string, maxLen: number) =>
+  z
+    .string()
+    .transform((s) => s.trim())
+    .pipe(z.string().min(1, `${fieldLabel} is required`).max(maxLen, `${fieldLabel} is too long`));
+
+const ghanaCardRegistrationFields = {
+  ghanaCardId: ghanaTrimmedRequired('Ghana Card ID', 200),
+  ghanaCardPersonalNumber: ghanaTrimmedRequired('Ghana Card personal ID number (PIN)', 200),
+  ghanaCardDocumentNumber: ghanaTrimmedRequired('Ghana Card document number', 200),
+  ghanaCardPlaceOfIssuance: ghanaTrimmedRequired('Ghana Card place of issuance', 200),
+  ghanaCardDateOfIssuance: ghanaTrimmedRequired('Ghana Card date of issuance', 100),
+  ghanaCardDateOfExpiry: ghanaTrimmedRequired('Ghana Card date of expiry', 100),
+};
+
+const ghanaCardProfileFields = {
+  ghanaCardId: z.string().max(200).optional().nullable(),
+  ghanaCardPersonalNumber: z.string().max(200).optional().nullable(),
+  ghanaCardDocumentNumber: z.string().max(200).optional().nullable(),
+  ghanaCardPlaceOfIssuance: z.string().max(200).optional().nullable(),
+  ghanaCardDateOfIssuance: z.string().max(100).optional().nullable(),
+  ghanaCardDateOfExpiry: z.string().max(100).optional().nullable(),
+};
 
 /**
  * Farmer registration validation schema
@@ -64,6 +89,7 @@ export const farmerRegistrationSchema = z
     // Certificates: optional, 0–10 URLs
     certificateUrls: z.array(z.string().url()).max(10).optional(),
     avatarUrl: z.string().url().optional(),
+    ...ghanaCardRegistrationFields,
   })
   .refine((data) => data.weeklyCapacityMax >= data.weeklyCapacityMin, {
     message: 'Maximum capacity must be greater than or equal to minimum capacity',
@@ -133,6 +159,7 @@ export const buyerRegistrationSchema = z.object({
     .min(1, 'At least one delivery address is required')
     .max(10, 'Maximum 10 delivery addresses allowed'),
   avatarUrl: z.string().url().optional(),
+  ...ghanaCardRegistrationFields,
 });
 
 /**
@@ -252,6 +279,7 @@ export const updateProfileSchema = z
     contactPerson: z.string().min(1).max(100).optional(),
     estimatedVolume: z.number().int().min(1).max(100000).optional().nullable(),
     orderFrequency: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY', 'AS_NEEDED']).optional().nullable(),
+    ...ghanaCardProfileFields,
   })
   .refine(
     (data) => {
@@ -261,7 +289,40 @@ export const updateProfileSchema = z
       return true;
     },
     { message: 'Maximum capacity must be >= minimum capacity', path: ['weeklyCapacityMax'] }
-  );
+  )
+  .superRefine((data, ctx) => {
+    const d = data as Record<string, unknown>;
+    const farmerTouched = [
+      'fullName',
+      'farmName',
+      'region',
+      'town',
+      'weeklyCapacityMin',
+      'weeklyCapacityMax',
+      'produceCategory',
+      'feedingMethod',
+    ].some((k) => d[k] !== undefined);
+    const buyerTouched = [
+      'fullName',
+      'businessName',
+      'buyerType',
+      'contactPerson',
+      'estimatedVolume',
+      'orderFrequency',
+    ].some((k) => d[k] !== undefined);
+    const ghanaTouched = GHANA_CARD_FIELD_KEYS.some((k) => d[k] !== undefined);
+    if (!farmerTouched && !buyerTouched && !ghanaTouched) return;
+    for (const k of GHANA_CARD_FIELD_KEYS) {
+      const v = d[k];
+      if (v == null || (typeof v === 'string' && v.trim() === '')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Ghana Card details are required',
+          path: [k],
+        });
+      }
+    }
+  });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 

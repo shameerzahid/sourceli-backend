@@ -5,6 +5,7 @@ import { hashPassword } from '../utils/password.js';
 import { toE164 } from '../utils/validation.js';
 import { createError } from '../middleware/errorHandler.js';
 import { createAuditLog } from '../utils/auditLog.js';
+import { ghanaCardDataForCreateRequired, ghanaCardPatchValue } from '../utils/ghanaCardFields.js';
 
 export interface ApproveFarmerData {
   adminNotes?: string;
@@ -492,6 +493,12 @@ export interface CreateSupplierAsAdminData {
   photoUrls?: string[];
   certificateUrls?: string[];
   avatarUrl?: string | null;
+  ghanaCardId: string;
+  ghanaCardPersonalNumber: string;
+  ghanaCardDocumentNumber: string;
+  ghanaCardPlaceOfIssuance: string;
+  ghanaCardDateOfIssuance: string;
+  ghanaCardDateOfExpiry: string;
 }
 
 /**
@@ -549,6 +556,7 @@ export async function createSupplierAsAdmin(
         feedingMethod: data.feedingMethod,
         verificationDate: new Date(),
         verificationAdminId: adminId,
+        ...ghanaCardDataForCreateRequired(data),
       },
     });
 
@@ -637,6 +645,12 @@ export interface CreateBuyerAsAdminData {
     isDefault?: boolean;
   }[];
   avatarUrl?: string | null;
+  ghanaCardId: string;
+  ghanaCardPersonalNumber: string;
+  ghanaCardDocumentNumber: string;
+  ghanaCardPlaceOfIssuance: string;
+  ghanaCardDateOfIssuance: string;
+  ghanaCardDateOfExpiry: string;
 }
 
 /**
@@ -692,6 +706,7 @@ export async function createBuyerAsAdmin(
         orderFrequency: data.orderFrequency,
         verificationDate: new Date(),
         verificationAdminId: adminId,
+        ...ghanaCardDataForCreateRequired(data),
       },
     });
 
@@ -1010,6 +1025,12 @@ export async function updateFarmer(
     feedingMethod?: string;
     photoUrls?: string[];
     certificateUrls?: string[];
+    ghanaCardId?: string | null;
+    ghanaCardPersonalNumber?: string | null;
+    ghanaCardDocumentNumber?: string | null;
+    ghanaCardPlaceOfIssuance?: string | null;
+    ghanaCardDateOfIssuance?: string | null;
+    ghanaCardDateOfExpiry?: string | null;
   }
 ) {
   const farmer = await prisma.farmer.findUnique({
@@ -1040,6 +1061,18 @@ export async function updateFarmer(
   if (data.weeklyCapacityMax != null) farmerData.weeklyCapacityMax = data.weeklyCapacityMax;
   if (data.produceCategory != null) farmerData.produceCategory = data.produceCategory.trim();
   if (data.feedingMethod != null) farmerData.feedingMethod = data.feedingMethod.trim();
+  const g1 = ghanaCardPatchValue(data.ghanaCardId);
+  if (g1 !== undefined) farmerData.ghanaCardId = g1;
+  const g2 = ghanaCardPatchValue(data.ghanaCardPersonalNumber);
+  if (g2 !== undefined) farmerData.ghanaCardPersonalNumber = g2;
+  const g3 = ghanaCardPatchValue(data.ghanaCardDocumentNumber);
+  if (g3 !== undefined) farmerData.ghanaCardDocumentNumber = g3;
+  const g4 = ghanaCardPatchValue(data.ghanaCardPlaceOfIssuance);
+  if (g4 !== undefined) farmerData.ghanaCardPlaceOfIssuance = g4;
+  const g5 = ghanaCardPatchValue(data.ghanaCardDateOfIssuance);
+  if (g5 !== undefined) farmerData.ghanaCardDateOfIssuance = g5;
+  const g6 = ghanaCardPatchValue(data.ghanaCardDateOfExpiry);
+  if (g6 !== undefined) farmerData.ghanaCardDateOfExpiry = g6;
 
   await prisma.$transaction(async (tx) => {
     if (Object.keys(userData).length > 0) {
@@ -1098,6 +1131,12 @@ export async function updateBuyer(
     contactPerson?: string;
     estimatedVolume?: number | null;
     orderFrequency?: string | null;
+    ghanaCardId?: string | null;
+    ghanaCardPersonalNumber?: string | null;
+    ghanaCardDocumentNumber?: string | null;
+    ghanaCardPlaceOfIssuance?: string | null;
+    ghanaCardDateOfIssuance?: string | null;
+    ghanaCardDateOfExpiry?: string | null;
     deliveryAddresses?: Array<{
       id?: string;
       address: string;
@@ -1133,6 +1172,18 @@ export async function updateBuyer(
   if (data.contactPerson != null) buyerData.contactPerson = data.contactPerson.trim();
   if (data.estimatedVolume !== undefined) buyerData.estimatedVolume = data.estimatedVolume;
   if (data.orderFrequency !== undefined) buyerData.orderFrequency = data.orderFrequency;
+  const b1 = ghanaCardPatchValue(data.ghanaCardId);
+  if (b1 !== undefined) buyerData.ghanaCardId = b1;
+  const b2 = ghanaCardPatchValue(data.ghanaCardPersonalNumber);
+  if (b2 !== undefined) buyerData.ghanaCardPersonalNumber = b2;
+  const b3 = ghanaCardPatchValue(data.ghanaCardDocumentNumber);
+  if (b3 !== undefined) buyerData.ghanaCardDocumentNumber = b3;
+  const b4 = ghanaCardPatchValue(data.ghanaCardPlaceOfIssuance);
+  if (b4 !== undefined) buyerData.ghanaCardPlaceOfIssuance = b4;
+  const b5 = ghanaCardPatchValue(data.ghanaCardDateOfIssuance);
+  if (b5 !== undefined) buyerData.ghanaCardDateOfIssuance = b5;
+  const b6 = ghanaCardPatchValue(data.ghanaCardDateOfExpiry);
+  if (b6 !== undefined) buyerData.ghanaCardDateOfExpiry = b6;
 
   if (Object.keys(userData).length > 0) {
     await prisma.user.update({

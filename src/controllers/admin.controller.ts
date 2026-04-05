@@ -217,6 +217,12 @@ export const createSupplierHandler = wrapAsync(
       photoUrls: validatedData.photoUrls,
       certificateUrls: validatedData.certificateUrls,
       avatarUrl: validatedData.avatarUrl?.trim(),
+      ghanaCardId: validatedData.ghanaCardId,
+      ghanaCardPersonalNumber: validatedData.ghanaCardPersonalNumber,
+      ghanaCardDocumentNumber: validatedData.ghanaCardDocumentNumber,
+      ghanaCardPlaceOfIssuance: validatedData.ghanaCardPlaceOfIssuance,
+      ghanaCardDateOfIssuance: validatedData.ghanaCardDateOfIssuance,
+      ghanaCardDateOfExpiry: validatedData.ghanaCardDateOfExpiry,
     };
 
     const result = await createSupplierAsAdmin(adminId, createData);
@@ -370,6 +376,12 @@ export const createBuyerHandler = wrapAsync(
         isDefault: addr.isDefault,
       })),
       avatarUrl: validatedData.avatarUrl?.trim(),
+      ghanaCardId: validatedData.ghanaCardId,
+      ghanaCardPersonalNumber: validatedData.ghanaCardPersonalNumber,
+      ghanaCardDocumentNumber: validatedData.ghanaCardDocumentNumber,
+      ghanaCardPlaceOfIssuance: validatedData.ghanaCardPlaceOfIssuance,
+      ghanaCardDateOfIssuance: validatedData.ghanaCardDateOfIssuance,
+      ghanaCardDateOfExpiry: validatedData.ghanaCardDateOfExpiry,
     };
 
     const result = await createBuyerAsAdmin(adminId, createData);

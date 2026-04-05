@@ -9,6 +9,7 @@ import {
 import { toE164, isValidPhone } from '../utils/validation.js';
 import { UserRole, UserStatus, BuyerType } from '@prisma/client';
 import { createError } from '../middleware/errorHandler.js';
+import { ghanaCardDataForCreateRequired } from '../utils/ghanaCardFields.js';
 
 // Registration DTOs
 export interface FarmerRegistrationData {
@@ -27,6 +28,12 @@ export interface FarmerRegistrationData {
   photoUrls?: string[]; // Cloudinary URLs for farm photos
   certificateUrls?: string[]; // Cloudinary URLs for farm certificates
   avatarUrl?: string | null;
+  ghanaCardId: string;
+  ghanaCardPersonalNumber: string;
+  ghanaCardDocumentNumber: string;
+  ghanaCardPlaceOfIssuance: string;
+  ghanaCardDateOfIssuance: string;
+  ghanaCardDateOfExpiry: string;
 }
 
 export interface BuyerRegistrationData {
@@ -48,6 +55,12 @@ export interface BuyerRegistrationData {
   companyRegistrationUrls?: string[];
   supportingDocUrls?: string[];
   avatarUrl?: string | null;
+  ghanaCardId: string;
+  ghanaCardPersonalNumber: string;
+  ghanaCardDocumentNumber: string;
+  ghanaCardPlaceOfIssuance: string;
+  ghanaCardDateOfIssuance: string;
+  ghanaCardDateOfExpiry: string;
 }
 
 // Login DTOs
@@ -124,6 +137,7 @@ export async function registerFarmer(
         weeklyCapacityMax: data.weeklyCapacityMax,
         produceCategory: data.produceCategory,
         feedingMethod: data.feedingMethod,
+        ...ghanaCardDataForCreateRequired(data),
       },
     });
 
@@ -218,6 +232,7 @@ export async function registerBuyer(
         contactPerson: data.contactPerson,
         estimatedVolume: data.estimatedVolume,
         orderFrequency: data.orderFrequency,
+        ...ghanaCardDataForCreateRequired(data),
       },
     });
 

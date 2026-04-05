@@ -15,6 +15,7 @@ import {
   changePassword,
   verifyResetToken,
 } from '../services/password.service.js';
+import { GHANA_CARD_FIELD_KEYS, ghanaCardPatchValue } from '../utils/ghanaCardFields.js';
 import {
   farmerRegistrationSchema,
   buyerRegistrationSchema,
@@ -187,6 +188,12 @@ export const registerFarmerHandler = wrapAsync(
       photoUrls,
       certificateUrls: certificateUrls.length > 0 ? certificateUrls : undefined,
       avatarUrl: validatedData.avatarUrl?.trim() || undefined,
+      ghanaCardId: validatedData.ghanaCardId,
+      ghanaCardPersonalNumber: validatedData.ghanaCardPersonalNumber,
+      ghanaCardDocumentNumber: validatedData.ghanaCardDocumentNumber,
+      ghanaCardPlaceOfIssuance: validatedData.ghanaCardPlaceOfIssuance,
+      ghanaCardDateOfIssuance: validatedData.ghanaCardDateOfIssuance,
+      ghanaCardDateOfExpiry: validatedData.ghanaCardDateOfExpiry,
     };
 
     // Register farmer
@@ -229,9 +236,16 @@ export const registerBuyerHandler = wrapAsync(
       deliveryAddresses: validatedData.deliveryAddresses.map((addr) => ({
         address: addr.address.trim(),
         landmark: addr.landmark?.trim(),
+        region: addr.region?.trim(),
         isDefault: addr.isDefault,
       })),
       avatarUrl: validatedData.avatarUrl?.trim() || undefined,
+      ghanaCardId: validatedData.ghanaCardId,
+      ghanaCardPersonalNumber: validatedData.ghanaCardPersonalNumber,
+      ghanaCardDocumentNumber: validatedData.ghanaCardDocumentNumber,
+      ghanaCardPlaceOfIssuance: validatedData.ghanaCardPlaceOfIssuance,
+      ghanaCardDateOfIssuance: validatedData.ghanaCardDateOfIssuance,
+      ghanaCardDateOfExpiry: validatedData.ghanaCardDateOfExpiry,
     };
 
     // Register buyer
@@ -312,6 +326,12 @@ export const getMeHandler = wrapAsync(
         weeklyCapacityMax: user.farmer.weeklyCapacityMax,
         produceCategory: user.farmer.produceCategory,
         feedingMethod: user.farmer.feedingMethod,
+        ghanaCardId: user.farmer.ghanaCardId ?? null,
+        ghanaCardPersonalNumber: user.farmer.ghanaCardPersonalNumber ?? null,
+        ghanaCardDocumentNumber: user.farmer.ghanaCardDocumentNumber ?? null,
+        ghanaCardPlaceOfIssuance: user.farmer.ghanaCardPlaceOfIssuance ?? null,
+        ghanaCardDateOfIssuance: user.farmer.ghanaCardDateOfIssuance ?? null,
+        ghanaCardDateOfExpiry: user.farmer.ghanaCardDateOfExpiry ?? null,
         application: user.farmer.application
           ? {
               id: user.farmer.application.id,
@@ -333,6 +353,12 @@ export const getMeHandler = wrapAsync(
         contactPerson: user.buyer.contactPerson,
         estimatedVolume: user.buyer.estimatedVolume,
         orderFrequency: user.buyer.orderFrequency ?? null,
+        ghanaCardId: user.buyer.ghanaCardId ?? null,
+        ghanaCardPersonalNumber: user.buyer.ghanaCardPersonalNumber ?? null,
+        ghanaCardDocumentNumber: user.buyer.ghanaCardDocumentNumber ?? null,
+        ghanaCardPlaceOfIssuance: user.buyer.ghanaCardPlaceOfIssuance ?? null,
+        ghanaCardDateOfIssuance: user.buyer.ghanaCardDateOfIssuance ?? null,
+        ghanaCardDateOfExpiry: user.buyer.ghanaCardDateOfExpiry ?? null,
         registration: user.buyer.registration
           ? {
               id: user.buyer.registration.id,
@@ -416,6 +442,12 @@ export const updateMeHandler = wrapAsync(
       if (validated.weeklyCapacityMax !== undefined) farmerData.weeklyCapacityMax = validated.weeklyCapacityMax;
       if (validated.produceCategory !== undefined) farmerData.produceCategory = validated.produceCategory.trim();
       if (validated.feedingMethod !== undefined) farmerData.feedingMethod = validated.feedingMethod.trim();
+      for (const key of GHANA_CARD_FIELD_KEYS) {
+        const v = ghanaCardPatchValue(
+          validated[key as keyof typeof validated] as string | null | undefined
+        );
+        if (v !== undefined) farmerData[key] = v;
+      }
       if (Object.keys(farmerData).length > 0) {
         await prisma.farmer.update({
           where: { id: user.farmer.id },
@@ -432,6 +464,12 @@ export const updateMeHandler = wrapAsync(
       if (validated.contactPerson !== undefined) buyerData.contactPerson = validated.contactPerson.trim();
       if (validated.estimatedVolume !== undefined) buyerData.estimatedVolume = validated.estimatedVolume;
       if (validated.orderFrequency !== undefined) buyerData.orderFrequency = validated.orderFrequency ?? null;
+      for (const key of GHANA_CARD_FIELD_KEYS) {
+        const v = ghanaCardPatchValue(
+          validated[key as keyof typeof validated] as string | null | undefined
+        );
+        if (v !== undefined) buyerData[key] = v;
+      }
       if (Object.keys(buyerData).length > 0) {
         await prisma.buyer.update({
           where: { id: user.buyer.id },
@@ -462,6 +500,12 @@ export const updateMeHandler = wrapAsync(
         weeklyCapacityMax: updated.farmer.weeklyCapacityMax,
         produceCategory: updated.farmer.produceCategory,
         feedingMethod: updated.farmer.feedingMethod,
+        ghanaCardId: updated.farmer.ghanaCardId ?? null,
+        ghanaCardPersonalNumber: updated.farmer.ghanaCardPersonalNumber ?? null,
+        ghanaCardDocumentNumber: updated.farmer.ghanaCardDocumentNumber ?? null,
+        ghanaCardPlaceOfIssuance: updated.farmer.ghanaCardPlaceOfIssuance ?? null,
+        ghanaCardDateOfIssuance: updated.farmer.ghanaCardDateOfIssuance ?? null,
+        ghanaCardDateOfExpiry: updated.farmer.ghanaCardDateOfExpiry ?? null,
         application: updated.farmer.application
           ? {
               id: updated.farmer.application.id,
@@ -482,6 +526,12 @@ export const updateMeHandler = wrapAsync(
         contactPerson: updated.buyer.contactPerson,
         estimatedVolume: updated.buyer.estimatedVolume,
         orderFrequency: updated.buyer.orderFrequency ?? null,
+        ghanaCardId: updated.buyer.ghanaCardId ?? null,
+        ghanaCardPersonalNumber: updated.buyer.ghanaCardPersonalNumber ?? null,
+        ghanaCardDocumentNumber: updated.buyer.ghanaCardDocumentNumber ?? null,
+        ghanaCardPlaceOfIssuance: updated.buyer.ghanaCardPlaceOfIssuance ?? null,
+        ghanaCardDateOfIssuance: updated.buyer.ghanaCardDateOfIssuance ?? null,
+        ghanaCardDateOfExpiry: updated.buyer.ghanaCardDateOfExpiry ?? null,
         registration: updated.buyer.registration
           ? {
               id: updated.buyer.registration.id,
